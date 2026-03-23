@@ -1,0 +1,1969 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="favicon.png" sizes="any">
+
+    <title>AI Sidebar & Navbar Clone</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <script src="js/retrac-api.js"></script>
+    <script src="js/chat-ui.js"></script>
+    <script src="js/settings-modal.js"></script>
+    <script src="js/search-chat.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #000000;
+            display: flex;
+            height: 100vh;
+            margin: 0;
+            color: white;
+            overflow: hidden;
+        }
+        
+        /* Custom scrollbar for a cleaner look */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #333;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+
+
+        /* Toggle animation */
+        .toggle-track {
+            transition: background-color 0.25s ease;
+        }
+        .toggle-dot {
+            transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.25s ease;
+        }
+        .toggle-track.on .toggle-dot {
+            transform: translateX(16px);
+        }
+
+        /* Dropdown animation */
+        #model-dropdown {
+            transform-origin: bottom left;
+            transition: opacity 0.2s ease, transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        #model-dropdown.dropdown-hidden {
+            opacity: 0;
+            transform: scale(0.95) translateY(8px);
+            pointer-events: none;
+        }
+        #model-dropdown.dropdown-visible,
+        #ellipsis-dropdown.dropdown-visible {
+            opacity: 1;
+            transform: scale(1) translateY(0);
+            pointer-events: auto;
+        }
+        #ellipsis-dropdown {
+            transform-origin: bottom center;
+            transition: opacity 0.2s ease, transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        #ellipsis-dropdown.dropdown-hidden {
+            opacity: 0;
+            transform: scale(0.95) translateY(8px);
+            pointer-events: none;
+        }
+
+        /* Waveform bars */
+        .wave-bar {
+            width: 3px;
+            border-radius: 2px;
+            background: white;
+            min-height: 3px;
+            transition: height 0.08s ease-out;
+        }
+
+        /* Recording UI breathing */
+        #recording-ui {
+            transition: transform 0.15s ease-out;
+        }
+
+
+        /* Review carousel */
+        @keyframes scrollCarousel {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-50%); }
+        }
+        .carousel-track {
+            animation: scrollCarousel 120s linear infinite;
+        }
+        .carousel-track:hover {
+            animation-play-state: paused;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        /* Sidebar collapse */
+        .sidebar-collapsed { width: 54px !important; padding: 12px 8px !important; align-items: center !important; }
+        .sidebar-collapsed .sidebar-hide { display: none !important; }
+        .sidebar-collapsed .sidebar-header { justify-content: center !important; margin-bottom: 16px !important; }
+        .sidebar-collapsed .sidebar-header > *:not(.sidebar-logo) { display: none !important; }
+        .sidebar-collapsed nav a { justify-content: center; padding: 8px; }
+        .sidebar-collapsed nav a span { display: none; }
+        .sidebar-collapsed nav a svg { margin: 0; }
+        .sidebar-collapsed #sidebar-auth { align-items: center; }
+        .sidebar-collapsed #sidebar-auth button { display: none; }
+        .sidebar-collapsed #sidebar-auth > div { justify-content: center; }
+        .sidebar-collapsed #sidebar-auth > div > div.flex-1 { display: none; }
+        .sidebar-collapsed #sidebar-auth .go-pro-card { display: none; }
+        aside { transition: width 0.2s ease; }
+    </style>
+</head>
+<body class="antialiased">
+
+    <!-- Sidebar -->
+    <aside id="sidebar" class="w-[280px] h-full bg-[#171717] flex flex-col p-4 border-r border-[#2a2a2a] shrink-0">
+        
+        <!-- Sidebar Header -->
+        <div class="sidebar-header flex items-center justify-between mb-8 px-1 mt-1">
+            <a href="index.html" class="sidebar-logo text-white hover:opacity-80 transition-opacity">
+                <img src="logo.png" width="32" height="32" alt="Retrac" class="w-8 h-8">
+            </a>
+
+            <div class="flex items-center gap-3 sidebar-hide">
+                <button class="text-[#a0a0a0] hover:text-white transition-colors">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <path d="M21 21l-4.3-4.3"></path>
+                    </svg>
+                </button>
+                <button id="sidebar-toggle-btn" class="text-[#a0a0a0] bg-[#232323] border border-[#2e2e2e] p-1.5 rounded-lg hover:text-white hover:bg-[#252525] transition-colors">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="3" width="18" height="18" rx="3" ry="3"></rect>
+                        <line x1="15" y1="3" x2="15" y2="21"></line>
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- New Chat Button -->
+        <button class="sidebar-hide flex items-center justify-between w-full bg-[#232323] hover:bg-[#252525] border border-[#333333] rounded-full py-2.5 px-4 mb-6 transition-colors group">
+            <div class="flex items-center gap-3">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="text-white">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                </svg>
+                <span class="font-medium text-[15px] text-[#f0f0f0]">New Chat</span>
+            </div>
+            <span class="text-[13px] text-[#707070] font-mono tracking-wide">Ctrl O</span>
+        </button>
+
+        <!-- Navigation -->
+        <nav class="flex flex-col gap-1.5 px-1">
+            <div class="flex items-center gap-3.5 py-2 px-3 rounded-lg text-[#555] cursor-default">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="3" width="7" height="7" rx="2"></rect>
+                    <rect x="14" y="3" width="7" height="7" rx="2"></rect>
+                    <rect x="14" y="14" width="7" height="7" rx="2"></rect>
+                    <rect x="3" y="14" width="7" height="7" rx="2"></rect>
+                </svg>
+                <span class="text-[15px] font-medium">Apps</span>
+                <span class="text-[11px] text-[#555] bg-[#2a2a2a] px-2 py-0.5 rounded-full ml-auto">Soon</span>
+            </div>
+            
+            <a href="images.html" class="flex items-center gap-3.5 py-2 px-3 rounded-lg hover:bg-[#232323] transition-colors group text-[#e0e0e0] hover:text-white">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                    <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                    <polyline points="21 15 16 10 5 21"></polyline>
+                </svg>
+                <span class="text-[15px] font-medium">Images</span>
+            </a>
+            
+            <a href="documents.html" class="flex items-center gap-3.5 py-2 px-3 rounded-lg hover:bg-[#232323] transition-colors group text-[#e0e0e0] hover:text-white">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M 8 22 H 18 A 2 2 0 0 0 20 20 V 4 A 2 2 0 0 0 18 2 H 6 A 2 2 0 0 0 4 4 V 16 L 8 22 Z"></path>
+                    <path d="M 4 16 H 6 A 2 2 0 0 1 8 18 V 22"></path>
+                    <line x1="10" y1="10" x2="15" y2="10"></line>
+                    <line x1="10" y1="14" x2="16" y2="14"></line>
+                </svg>
+                <span class="text-[15px] font-medium">Documents</span>
+            </a>
+            
+            <a href="projects.html" class="flex items-center gap-3.5 py-2 px-3 rounded-lg hover:bg-[#232323] transition-colors group text-[#e0e0e0] hover:text-white">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"></path>
+                    <path d="M2 10h20"></path>
+                </svg>
+                <span class="text-[15px] font-medium">Projects</span>
+            </a>
+            
+            <a href="#" id="search-chat-btn" class="flex items-center gap-3.5 py-2 px-3 rounded-lg hover:bg-[#232323] transition-colors group text-[#e0e0e0] hover:text-white">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <path d="M21 21l-4.3-4.3"></path>
+                </svg>
+                <span class="text-[15px] font-medium">Search Chat</span>
+            </a>
+        </nav>
+
+        <!-- Chat History -->
+        <div id="chat-history-container" class="sidebar-hide mt-6 px-1 flex-1 overflow-y-auto">
+            <p class="text-[#555] text-[13px] px-3">No chats yet</p>
+        </div>
+
+        <!-- Auth Buttons Bottom / User Profile -->
+        <div id="sidebar-auth" class="mt-auto flex flex-col gap-3 pt-6 pb-2">
+            <button onclick="document.getElementById('ghost-btn').click()" class="w-full bg-white text-[#171717] font-medium py-2.5 rounded-full hover:bg-gray-200 transition-colors text-[15px]">Log in</button>
+            <button onclick="document.getElementById('ghost-btn').click()" class="w-full bg-transparent text-white border border-[#333333] font-medium py-2.5 rounded-full hover:bg-[#232323] transition-colors text-[15px]">Sign up</button>
+        </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 flex flex-col bg-[#252525] relative">
+
+        <!-- Top Navbar -->
+        <header class="h-14 flex items-center justify-between px-4 border-b border-[#2a2a2a] bg-[#252525] shrink-0">
+            <div></div>
+
+            <!-- Center: Incognito Banner (hidden by default) -->
+            <div id="incognito-banner" class="hidden absolute left-1/2 -translate-x-1/2 flex items-center gap-2 bg-[#333] rounded-full px-4 py-1.5" style="z-index:5;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M9 10h.01"></path><path d="M15 10h.01"></path>
+                    <path d="M12 2a8 8 0 0 0-8 8v12l3-3 2.5 2.5L12 19l2.5 2.5L17 19l3 3V10a8 8 0 0 0-8-8z"></path>
+                </svg>
+                <span class="text-white text-[12px] font-medium">Chats won't be saved</span>
+            </div>
+
+            <!-- Rechts: Actions -->
+            <div class="flex items-center gap-2">
+                <!-- Settings Button -->
+                <button id="settings-btn" class="p-2 text-[#8e8e8e] hover:text-white rounded-lg transition-colors" title="Settings">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                    </svg>
+                </button>
+                <!-- Ghost/Incognito Icon -->
+                <button id="ghost-btn" class="p-2 text-[#8e8e8e] hover:text-white rounded-lg transition-colors" title="Incognito Mode">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9 10h.01"></path>
+                        <path d="M15 10h.01"></path>
+                        <path d="M12 2a8 8 0 0 0-8 8v12l3-3 2.5 2.5L12 19l2.5 2.5L17 19l3 3V10a8 8 0 0 0-8-8z"></path>
+                    </svg>
+                </button>
+            </div>
+        </header>
+
+        <!-- Chat Messages Area (hidden until first message) -->
+        <div id="chat-messages" class="hidden flex-1 overflow-y-auto px-6 py-6" style="scroll-behavior: smooth;">
+            <div class="max-w-3xl mx-auto" id="chat-messages-inner"></div>
+        </div>
+
+        <!-- Welcome View (centered) -->
+        <div id="welcome-view" class="flex-1 flex flex-col items-center justify-center px-6">
+            <h1 class="text-white text-[28px] font-semibold mb-6">How can I help you?</h1>
+        </div>
+
+        <!-- Prompt Area (fixed at bottom) -->
+        <div class="shrink-0 px-6 pb-6 pt-2 bg-[#252525]">
+            <div class="w-full max-w-4xl mx-auto">
+            <!-- Recording UI (hidden by default) -->
+            <div id="recording-ui" class="hidden flex-col bg-[#2f2f2f] rounded-[2rem] shadow-2xl border border-[#3e3e3e] overflow-hidden">
+                <!-- Top hint -->
+                <p class="text-[#9ca3af] text-[14px] text-center pt-4 pb-2">Go ahead, record a quick note</p>
+                <!-- Waveform -->
+                <div class="flex items-end justify-center gap-[3px] px-8 h-[50px]" id="waveform">
+                </div>
+                <!-- Bottom bar -->
+                <div class="flex items-center justify-between px-4 pb-4 pt-1">
+                    <!-- Cancel -->
+                    <button id="recording-cancel" class="bg-[#3a3a3a] hover:bg-[#444] text-white text-[14px] font-medium px-5 py-2 rounded-full transition-colors">Cancel</button>
+                    <!-- Timer -->
+                    <div class="flex items-center gap-2">
+                        <span class="w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse"></span>
+                        <span id="recording-timer" class="text-white text-[16px] font-mono tracking-wider">0:00:00</span>
+                    </div>
+                    <!-- Pause & Confirm -->
+                    <div class="flex items-center gap-2">
+                        <button id="recording-pause" class="w-[40px] h-[40px] bg-[#3a3a3a] hover:bg-[#444] rounded-full flex items-center justify-center transition-colors">
+                            <svg id="pause-icon" width="18" height="18" viewBox="0 0 24 24" fill="white" stroke="none">
+                                <rect x="6" y="4" width="4" height="16" rx="1"></rect>
+                                <rect x="14" y="4" width="4" height="16" rx="1"></rect>
+                            </svg>
+                            <svg id="play-icon" class="hidden" width="18" height="18" viewBox="0 0 24 24" fill="white" stroke="none">
+                                <polygon points="6,4 20,12 6,20"></polygon>
+                            </svg>
+                        </button>
+                        <button id="recording-confirm" class="w-[40px] h-[40px] bg-white hover:bg-gray-200 rounded-full flex items-center justify-center transition-colors">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="20 6 9 17 4 12"></polyline>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Prompt Container -->
+            <div id="prompt-container" class="bg-[#2f2f2f] rounded-[2rem] p-3 pl-4 pr-3 shadow-2xl border border-[#3e3e3e] flex flex-col gap-2 relative">
+                
+                <!-- Drop Zone (hidden by default, shown on drag) -->
+                <div id="drop-zone" class="hidden flex-col items-center justify-center py-8 mx-1 mt-1 mb-1 rounded-2xl border-2 border-dashed border-[#5a6a8a] bg-[#2a3045]/60">
+                    <p class="text-white text-lg font-semibold mb-1">Drop anything here or browse</p>
+                    <p class="text-[#9ca3af] text-sm mb-4">Docs, images, videos, audio files, links & more</p>
+                    <div class="flex items-center gap-3">
+                        <!-- Upload icon -->
+                        <div class="w-10 h-10 rounded-full bg-[#3a3a4a] flex items-center justify-center">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="17 8 12 3 7 8"></polyline>
+                                <line x1="12" y1="3" x2="12" y2="15"></line>
+                            </svg>
+                        </div>
+                        <!-- Mic icon -->
+                        <div class="w-10 h-10 rounded-full bg-[#3a3a4a] flex items-center justify-center">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
+                                <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                                <line x1="12" y1="19" x2="12" y2="22"></line>
+                            </svg>
+                        </div>
+                        <!-- Link icon -->
+                        <div class="w-10 h-10 rounded-full bg-[#3a3a4a] flex items-center justify-center">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+                            </svg>
+                        </div>
+                        <!-- Copy/clipboard icon -->
+                        <div class="w-10 h-10 rounded-full bg-[#3a3a4a] flex items-center justify-center">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Attached Files (shown after drop) -->
+                <div id="attached-files-wrapper" class="hidden items-center gap-2 pt-1 relative">
+                    <button id="scroll-left-btn" onclick="document.getElementById('attached-files').scrollBy({left: -150, behavior: 'smooth'})" class="hidden shrink-0 mr-1 w-[28px] h-[28px] bg-[#464646] hover:bg-[#555555] rounded-full flex items-center justify-center text-white cursor-pointer transition-colors">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="15 18 9 12 15 6"></polyline>
+                        </svg>
+                    </button>
+                    <div id="attached-files" class="flex items-center gap-2 overflow-hidden flex-1"></div>
+                    <button id="scroll-right-btn" onclick="document.getElementById('attached-files').scrollBy({left: 150, behavior: 'smooth'})" class="hidden shrink-0 ml-1 w-[28px] h-[28px] bg-[#464646] hover:bg-[#555555] rounded-full flex items-center justify-center text-white cursor-pointer transition-colors">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="9 18 15 12 9 6"></polyline>
+                        </svg>
+                    </button>
+                </div>
+
+                <!-- Text Input (Textarea for more height) -->
+                <textarea
+                    id="chat-input"
+                    rows="2"
+                    class="w-full bg-transparent text-[#f3f4f6] text-[16px] outline-none placeholder-[#8e8e8e] resize-none mt-1"
+                    placeholder="Ask anything..."
+                ></textarea>
+
+                <!-- Bottom Row: Controls -->
+                <div class="flex items-center justify-between mt-1">
+                    
+                    <!-- Left Controls -->
+                    <div class="flex items-center gap-1.5">
+                        <!-- Plus Button -->
+                        <input type="file" id="file-input" multiple class="hidden" />
+                        <button onclick="document.getElementById('file-input').click()" class="p-2 text-[#9ca3af] hover:text-white transition-colors rounded-full hover:bg-[#3f3f3f]">
+                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="12" y1="5" x2="12" y2="19"></line>
+                                <line x1="5" y1="12" x2="19" y2="12"></line>
+                            </svg>
+                        </button>
+
+                        <!-- Model Selector Pill -->
+                        <div class="relative ml-1">
+                            <button id="model-selector-btn" class="flex items-center gap-2 bg-[#212121] border border-[#3a3a3a] rounded-full px-3 py-1.5 hover:bg-[#2a2a2a] transition-colors">
+                                <span id="model-selector-icon">
+                                    <img src="https://raw.githubusercontent.com/lobehub/lobe-icons/refs/heads/master/packages/static-png/dark/gemini-color.png" width="16" height="16" alt="Gemini" />
+                                </span>
+                                <span id="model-selector-label" class="text-[#d1d5db] text-[14px] font-medium">Gemini 3 Pro</span>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="ml-0.5">
+                                    <polyline points="8 10 12 6 16 10"></polyline>
+                                    <polyline points="16 14 12 18 8 14"></polyline>
+                                </svg>
+                            </button>
+
+                            <!-- Model Dropdown -->
+                            <div id="model-dropdown" class="dropdown-hidden absolute bottom-full left-0 mb-2 w-[300px] bg-[#2a2a2a] border border-[#3e3e3e] rounded-2xl shadow-2xl overflow-hidden z-50">
+                                <!-- Search -->
+                                <div class="p-3 border-b border-[#3e3e3e]">
+                                    <input type="text" id="model-search" placeholder="Search models..." class="w-full bg-transparent text-white text-[15px] outline-none placeholder-[#6b6b6b]" />
+                                </div>
+
+                                <!-- Optional Section -->
+                                <div class="px-4 pt-3 pb-1">
+                                    <p class="text-[#6b6b6b] text-[13px] font-medium mb-2">Optional</p>
+                                    <div class="flex items-center justify-between py-2">
+                                        <span class="text-white text-[15px]">Auto</span>
+                                        <div class="toggle-track w-10 h-6 bg-[#4a4a4a] rounded-full relative cursor-pointer" data-toggle="auto">
+                                            <div class="toggle-dot w-5 h-5 bg-[#888] rounded-full absolute top-0.5 left-0.5"></div>
+                                        </div>
+                                    </div>
+                                    <div class="flex items-center justify-between py-2">
+                                        <span class="text-white text-[15px]">Multiple Models</span>
+                                        <div class="toggle-track w-10 h-6 bg-[#4a4a4a] rounded-full relative cursor-pointer" data-toggle="multiple">
+                                            <div class="toggle-dot w-5 h-5 bg-[#888] rounded-full absolute top-0.5 left-0.5"></div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Models Section -->
+                                <div class="px-4 pt-2 pb-1">
+                                    <p class="text-[#6b6b6b] text-[13px] font-medium mb-1">Models</p>
+                                </div>
+
+                                <!-- More models -->
+                                <button class="w-full flex items-center justify-between px-4 py-2.5 hover:bg-[#353535] transition-colors">
+                                    <span class="text-white text-[15px]">More models</span>
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <polyline points="9 18 15 12 9 6"></polyline>
+                                    </svg>
+                                </button>
+
+                                <!-- Model List -->
+                                <div id="model-list">
+                                    <!-- Claude -->
+                                    <button class="model-option w-full flex items-center gap-3 px-4 py-2.5 hover:bg-[#353535] transition-colors" data-model="Claude Sonnet 4.5">
+                                        <img src="https://raw.githubusercontent.com/lobehub/lobe-icons/refs/heads/master/packages/static-png/dark/claude-color.png" width="20" height="20" class="shrink-0" alt="Claude" />
+                                        <span class="text-white text-[15px]">Claude Sonnet 4.5</span>
+                                    </button>
+                                    <!-- Gemini -->
+                                    <button class="model-option w-full flex items-center gap-3 px-4 py-2.5 bg-[#1a3a5c] transition-colors" data-model="Gemini 3 Pro">
+                                        <img src="https://raw.githubusercontent.com/lobehub/lobe-icons/refs/heads/master/packages/static-png/dark/gemini-color.png" width="20" height="20" class="shrink-0" alt="Gemini" />
+                                        <span class="text-white text-[15px]">Gemini 3 Pro</span>
+                                        <span class="text-[#5a9ae6] text-[12px] italic ml-1">BETA</span>
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="ml-auto checkmark-icon">
+                                            <polyline points="20 6 9 17 4 12"></polyline>
+                                        </svg>
+                                    </button>
+                                    <!-- GPT-5.1 -->
+                                    <button class="model-option w-full flex items-center gap-3 px-4 py-2.5 hover:bg-[#353535] transition-colors" data-model="GPT-5.1">
+                                        <img src="https://img.icons8.com/ios11/512/FFFFFF/chatgpt.png" width="20" height="20" class="shrink-0" alt="GPT" />
+                                        <span class="text-white text-[15px]">GPT-5.1</span>
+                                    </button>
+                                    <!-- GPT-5.2 -->
+                                    <button class="model-option w-full flex items-center gap-3 px-4 py-2.5 hover:bg-[#353535] transition-colors" data-model="GPT-5.2">
+                                        <img src="https://img.icons8.com/ios11/512/FFFFFF/chatgpt.png" width="20" height="20" class="shrink-0" alt="GPT" />
+                                        <span class="text-white text-[15px]">GPT-5.2</span>
+                                        <span class="text-[#5a9ae6] text-[12px] italic ml-1">BETA</span>
+                                    </button>
+                                </div>
+
+                                <!-- Ask for a model -->
+                                <button class="w-full flex items-center justify-between px-4 py-3 border-t border-[#3e3e3e] mt-1 hover:bg-[#353535] transition-colors">
+                                    <div class="flex items-center gap-2">
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <circle cx="12" cy="12" r="10"></circle>
+                                            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                                            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                                        </svg>
+                                        <span class="text-white text-[15px]">Ask for a model</span>
+                                    </div>
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <polyline points="9 18 15 12 9 6"></polyline>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+
+
+                        <!-- Ellipsis Button -->
+                        <div class="relative">
+                            <button id="ellipsis-btn" class="p-2 text-[#9ca3af] hover:text-white transition-colors rounded-full hover:bg-[#3f3f3f]">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="5" cy="12" r="1"></circle>
+                                    <circle cx="12" cy="12" r="1"></circle>
+                                    <circle cx="19" cy="12" r="1"></circle>
+                                </svg>
+                            </button>
+
+                            <!-- Ellipsis Dropdown -->
+                            <div id="ellipsis-dropdown" class="dropdown-hidden absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-[260px] bg-[#2a2a2a] border border-[#3e3e3e] rounded-2xl shadow-2xl overflow-hidden z-50">
+
+                                <!-- Search Web -->
+                                <button class="w-full flex items-center gap-3 px-4 py-3 hover:bg-[#353535] transition-colors">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <circle cx="12" cy="12" r="10"></circle>
+                                        <line x1="2" y1="12" x2="22" y2="12"></line>
+                                        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+                                    </svg>
+                                    <span class="text-white text-[14px]">Search the web</span>
+                                </button>
+
+                                <!-- Deep Research -->
+                                <button class="w-full flex items-center gap-3 px-4 py-3 hover:bg-[#353535] transition-colors">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path>
+                                        <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path>
+                                    </svg>
+                                    <span class="text-white text-[14px]">Deep research</span>
+                                </button>
+
+                                <!-- Canva -->
+                                <button class="w-full flex items-center gap-3 px-4 py-3 hover:bg-[#353535] transition-colors border-t border-[#3e3e3e]">
+                                    <img src="https://1000logos.net/wp-content/uploads/2020/03/Canva-icon.png" width="34" height="34" class="shrink-0 rounded object-contain" alt="Canva" style="margin: -8px 0 -8px -8px" />
+                                    <span class="text-white text-[14px] -ml-2">Canva</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right Controls -->
+                    <div class="flex items-center gap-2">
+                        <!-- Microphone Button -->
+                        <button id="mic-btn" class="p-2.5 mr-1 text-[#9ca3af] hover:text-white transition-colors rounded-full hover:bg-[#3f3f3f]">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
+                                <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                                <line x1="12" y1="19" x2="12" y2="22"></line>
+                            </svg>
+                        </button>
+
+                        <!-- Submit Arrow Button -->
+                        <button id="send-btn" class="w-[38px] h-[38px] bg-white rounded-full flex items-center justify-center hover:bg-gray-200 transition-colors mr-1 shadow-sm">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="12" y1="19" x2="12" y2="5"></line>
+                                <polyline points="5 12 12 5 19 12"></polyline>
+                            </svg>
+                        </button>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+        </div>
+
+    </main>
+
+    <!-- Search Chat Popup -->
+    <div id="search-backdrop" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.6); backdrop-filter:blur(4px); z-index:9998;"></div>
+    <div id="search-popup" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); z-index:9999; width:600px; max-height:70vh; background:#1a1a1a; border:1px solid #2a2a2a; border-radius:16px; box-shadow:0 25px 50px rgba(0,0,0,0.5); overflow:hidden; flex-direction:column;">
+        <!-- Search Header -->
+        <div style="display:flex; align-items:center; padding:16px 20px; border-bottom:1px solid #2a2a2a;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;">
+                <circle cx="11" cy="11" r="8"></circle>
+                <path d="M21 21l-4.3-4.3"></path>
+            </svg>
+            <input id="search-input" type="text" placeholder="Search..." style="flex:1; background:transparent; border:none; outline:none; color:white; font-size:16px; padding:0 12px; font-family:inherit;" />
+            <button id="search-close" style="background:none; border:none; cursor:pointer; color:#666; padding:4px;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+        </div>
+
+        <!-- Search Results -->
+        <div id="search-results" style="flex:1; overflow-y:auto; padding:16px 8px;">
+            <!-- Actions -->
+            <p style="padding:4px 12px 8px; font-size:12px; color:#666; font-weight:600;">Actions</p>
+            <button class="search-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-[#252525] transition-colors text-left">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                </svg>
+                <span class="text-white text-[14px] font-medium">Create New Chat</span>
+            </button>
+
+            <!-- Chat History -->
+            <p style="padding:16px 12px 8px; font-size:12px; color:#666; font-weight:600;">Today</p>
+            <div id="search-chat-list">
+                <button class="search-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-[#252525] transition-colors text-left">
+                    <span class="text-white text-[14px]">General Chat</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Ghost Popup: Backdrop -->
+    <div id="ghost-backdrop" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.6); backdrop-filter:blur(4px); z-index:9998;"></div>
+    <!-- Ghost Popup: Card -->
+    <div id="ghost-card" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); z-index:9999; background:#0e0e0e; border:1px solid #222; border-radius:24px; box-shadow:0 25px 50px rgba(0,0,0,0.5); overflow:hidden; max-height:90vh;">
+        <!-- Close -->
+        <button id="ghost-close" style="position:absolute; top:16px; right:16px; background:none; border:none; cursor:pointer; color:#888; z-index:10;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+
+        <div style="display:flex; width:1050px; height:700px;">
+            <!-- Left: Landing Content -->
+            <div style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:40px; overflow-y:auto; border-right:1px solid #222;">
+                <!-- Badge -->
+                <div class="flex flex-col items-center mb-6">
+                    <div class="text-center">
+                        <p class="text-[#aaa] text-[15px] font-medium">#1</p>
+                        <p class="text-[#aaa] text-[18px]">AI Chatbot</p>
+                        <div class="flex gap-0.5 justify-center"><span class="text-yellow-400 text-[18px]">★★★★★</span></div>
+                        <p class="text-white text-[28px] font-bold">35M+ users</p>
+                    </div>
+                </div>
+
+                <!-- Available on -->
+                <p class="text-[#888] text-[13px] mb-1">Available on</p>
+                <div class="w-px h-4 bg-[#333] mb-2"></div>
+                <div class="flex items-center gap-3 mb-8">
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/c/c1/Google_%22G%22_logo.svg/120px-Google_%22G%22_logo.svg.png" width="32" height="32" class="rounded-lg" />
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/a/a0/Firefox_logo%2C_2019.svg/120px-Firefox_logo%2C_2019.svg.png" width="32" height="32" class="rounded-lg" />
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/5/52/Safari_browser_logo.svg/120px-Safari_browser_logo.svg.png" width="32" height="32" class="rounded-lg" />
+                </div>
+
+                <!-- Trusted -->
+                <h2 class="text-white text-[20px] font-bold mt-6 mb-6">Trusted by Millions</h2>
+
+                <!-- Review Cards Carousel -->
+                <div style="width:100%; overflow:hidden; mask-image:linear-gradient(to right, transparent, black 5%, black 95%, transparent);">
+                    <div class="carousel-track" style="display:flex; gap:16px; width:max-content;">
+                        <!-- 10 cards (duplicated for seamless loop) -->
+                        <div class="bg-[#141414] border border-[#222] rounded-xl p-5 flex flex-col" style="width:220px; flex-shrink:0;">
+                            <p class="text-white font-semibold text-[13px] mb-1">Super user friendly</p>
+                            <div class="mb-1.5"><span class="text-yellow-400 text-[11px]">★★★★★</span></div>
+                            <p class="text-[#888] text-[11px] leading-relaxed flex-1">This is the most user-friendly AI app I've used so far. Love it for any question I have.</p>
+                            <div class="flex items-center gap-2 mt-3"><img src="https://i.pravatar.cc/48?img=1" class="w-6 h-6 rounded-full object-cover" /><div><p class="text-white text-[11px] font-medium">Emma Taylor</p><p class="text-[#555] text-[9px]">Product Manager</p></div></div>
+                        </div>
+                        <div class="bg-[#141414] border border-[#222] rounded-xl p-5 flex flex-col" style="width:220px; flex-shrink:0;">
+                            <p class="text-white font-semibold text-[13px] mb-1">The perfect all-in-one app!</p>
+                            <div class="mb-1.5"><span class="text-yellow-400 text-[11px]">★★★★★</span></div>
+                            <p class="text-[#888] text-[11px] leading-relaxed flex-1">It is crazy how complex and intelligent this is, but also how excellent the feedback inspires or help you.</p>
+                            <div class="flex items-center gap-2 mt-3"><img src="https://i.pravatar.cc/48?img=11" class="w-6 h-6 rounded-full object-cover" /><div><p class="text-white text-[11px] font-medium">Noah Johnson</p><p class="text-[#555] text-[9px]">Content Writer</p></div></div>
+                        </div>
+                        <div class="bg-[#141414] border border-[#222] rounded-xl p-5 flex flex-col" style="width:220px; flex-shrink:0;">
+                            <p class="text-white font-semibold text-[13px] mb-1">Loving the AI</p>
+                            <div class="mb-1.5"><span class="text-yellow-400 text-[11px]">★★★★★</span></div>
+                            <p class="text-[#888] text-[11px] leading-relaxed flex-1">So personalized and so fast! I'm loving how this AI app responds to anything immediately.</p>
+                            <div class="flex items-center gap-2 mt-3"><img src="https://i.pravatar.cc/48?img=12" class="w-6 h-6 rounded-full object-cover" /><div><p class="text-white text-[11px] font-medium">Liam Smith</p><p class="text-[#555] text-[9px]">Digital Marketer</p></div></div>
+                        </div>
+                        <div class="bg-[#141414] border border-[#222] rounded-xl p-5 flex flex-col" style="width:220px; flex-shrink:0;">
+                            <p class="text-white font-semibold text-[13px] mb-1">Perfect AI Tool</p>
+                            <div class="mb-1.5"><span class="text-yellow-400 text-[11px]">★★★★★</span></div>
+                            <p class="text-[#888] text-[11px] leading-relaxed flex-1">It's a great time-saver to access all the latest AI models through a simple interface.</p>
+                            <div class="flex items-center gap-2 mt-3"><img src="https://i.pravatar.cc/48?img=5" class="w-6 h-6 rounded-full object-cover" /><div><p class="text-white text-[11px] font-medium">Sophia Brown</p><p class="text-[#555] text-[9px]">Customer Support</p></div></div>
+                        </div>
+                        <div class="bg-[#141414] border border-[#222] rounded-xl p-5 flex flex-col" style="width:220px; flex-shrink:0;">
+                            <p class="text-white font-semibold text-[13px] mb-1">Very Cool</p>
+                            <div class="mb-1.5"><span class="text-yellow-400 text-[11px]">★★★★★</span></div>
+                            <p class="text-[#888] text-[11px] leading-relaxed flex-1">It is an amazing app for generating fun and useful content and creating great ideas!</p>
+                            <div class="flex items-center gap-2 mt-3"><img src="https://i.pravatar.cc/48?img=14" class="w-6 h-6 rounded-full object-cover" /><div><p class="text-white text-[11px] font-medium">William Davis</p><p class="text-[#555] text-[9px]">Software Developer</p></div></div>
+                        </div>
+                        <div class="bg-[#141414] border border-[#222] rounded-xl p-5 flex flex-col" style="width:220px; flex-shrink:0;">
+                            <p class="text-white font-semibold text-[13px] mb-1">Crazy Good!</p>
+                            <div class="mb-1.5"><span class="text-yellow-400 text-[11px]">★★★★★</span></div>
+                            <p class="text-[#888] text-[11px] leading-relaxed flex-1">It's insane how advanced and helpful this is, and the feedback you get from it can really inspire you.</p>
+                            <div class="flex items-center gap-2 mt-3"><img src="https://i.pravatar.cc/48?img=9" class="w-6 h-6 rounded-full object-cover" /><div><p class="text-white text-[11px] font-medium">Isabella Garcia</p><p class="text-[#555] text-[9px]">Data Analyst</p></div></div>
+                        </div>
+                        <div class="bg-[#141414] border border-[#222] rounded-xl p-5 flex flex-col" style="width:220px; flex-shrink:0;">
+                            <p class="text-white font-semibold text-[13px] mb-1">Mind Blowing</p>
+                            <div class="mb-1.5"><span class="text-yellow-400 text-[11px]">★★★★★</span></div>
+                            <p class="text-[#888] text-[11px] leading-relaxed flex-1">Hands down the best AI chatbot I've ever used. The responses are incredibly accurate and helpful.</p>
+                            <div class="flex items-center gap-2 mt-3"><img src="https://i.pravatar.cc/48?img=15" class="w-6 h-6 rounded-full object-cover" /><div><p class="text-white text-[11px] font-medium">James Wilson</p><p class="text-[#555] text-[9px]">Entrepreneur</p></div></div>
+                        </div>
+                        <div class="bg-[#141414] border border-[#222] rounded-xl p-5 flex flex-col" style="width:220px; flex-shrink:0;">
+                            <p class="text-white font-semibold text-[13px] mb-1">A Must Have</p>
+                            <div class="mb-1.5"><span class="text-yellow-400 text-[11px]">★★★★★</span></div>
+                            <p class="text-[#888] text-[11px] leading-relaxed flex-1">I use this every single day. It helps me write, brainstorm, and solve problems faster than ever.</p>
+                            <div class="flex items-center gap-2 mt-3"><img src="https://i.pravatar.cc/48?img=16" class="w-6 h-6 rounded-full object-cover" /><div><p class="text-white text-[11px] font-medium">Olivia Martinez</p><p class="text-[#555] text-[9px]">UX Designer</p></div></div>
+                        </div>
+                        <div class="bg-[#141414] border border-[#222] rounded-xl p-5 flex flex-col" style="width:220px; flex-shrink:0;">
+                            <p class="text-white font-semibold text-[13px] mb-1">Game Changer</p>
+                            <div class="mb-1.5"><span class="text-yellow-400 text-[11px]">★★★★★</span></div>
+                            <p class="text-[#888] text-[11px] leading-relaxed flex-1">This app completely changed how I work. The AI understands context perfectly every time.</p>
+                            <div class="flex items-center gap-2 mt-3"><img src="https://i.pravatar.cc/48?img=18" class="w-6 h-6 rounded-full object-cover" /><div><p class="text-white text-[11px] font-medium">Daniel Lee</p><p class="text-[#555] text-[9px]">Freelancer</p></div></div>
+                        </div>
+                        <div class="bg-[#141414] border border-[#222] rounded-xl p-5 flex flex-col" style="width:220px; flex-shrink:0;">
+                            <p class="text-white font-semibold text-[13px] mb-1">Best AI Ever</p>
+                            <div class="mb-1.5"><span class="text-yellow-400 text-[11px]">★★★★★</span></div>
+                            <p class="text-[#888] text-[11px] leading-relaxed flex-1">Tried many AI apps and this one is by far the best. Clean interface and incredibly smart responses.</p>
+                            <div class="flex items-center gap-2 mt-3"><img src="https://i.pravatar.cc/48?img=20" class="w-6 h-6 rounded-full object-cover" /><div><p class="text-white text-[11px] font-medium">Ava Robinson</p><p class="text-[#555] text-[9px]">Student</p></div></div>
+                        </div>
+                        <!-- Duplicate for seamless loop -->
+                        <div class="bg-[#141414] border border-[#222] rounded-xl p-5 flex flex-col" style="width:220px; flex-shrink:0;">
+                            <p class="text-white font-semibold text-[13px] mb-1">Super user friendly</p>
+                            <div class="mb-1.5"><span class="text-yellow-400 text-[11px]">★★★★★</span></div>
+                            <p class="text-[#888] text-[11px] leading-relaxed flex-1">This is the most user-friendly AI app I've used so far. Love it for any question I have.</p>
+                            <div class="flex items-center gap-2 mt-3"><img src="https://i.pravatar.cc/48?img=1" class="w-6 h-6 rounded-full object-cover" /><div><p class="text-white text-[11px] font-medium">Emma Taylor</p><p class="text-[#555] text-[9px]">Product Manager</p></div></div>
+                        </div>
+                        <div class="bg-[#141414] border border-[#222] rounded-xl p-5 flex flex-col" style="width:220px; flex-shrink:0;">
+                            <p class="text-white font-semibold text-[13px] mb-1">The perfect all-in-one app!</p>
+                            <div class="mb-1.5"><span class="text-yellow-400 text-[11px]">★★★★★</span></div>
+                            <p class="text-[#888] text-[11px] leading-relaxed flex-1">It is crazy how complex and intelligent this is, but also how excellent the feedback inspires or help you.</p>
+                            <div class="flex items-center gap-2 mt-3"><img src="https://i.pravatar.cc/48?img=11" class="w-6 h-6 rounded-full object-cover" /><div><p class="text-white text-[11px] font-medium">Noah Johnson</p><p class="text-[#555] text-[9px]">Content Writer</p></div></div>
+                        </div>
+                        <div class="bg-[#141414] border border-[#222] rounded-xl p-5 flex flex-col" style="width:220px; flex-shrink:0;">
+                            <p class="text-white font-semibold text-[13px] mb-1">Loving the AI</p>
+                            <div class="mb-1.5"><span class="text-yellow-400 text-[11px]">★★★★★</span></div>
+                            <p class="text-[#888] text-[11px] leading-relaxed flex-1">So personalized and so fast! I'm loving how this AI app responds to anything immediately.</p>
+                            <div class="flex items-center gap-2 mt-3"><img src="https://i.pravatar.cc/48?img=12" class="w-6 h-6 rounded-full object-cover" /><div><p class="text-white text-[11px] font-medium">Liam Smith</p><p class="text-[#555] text-[9px]">Digital Marketer</p></div></div>
+                        </div>
+                        <div class="bg-[#141414] border border-[#222] rounded-xl p-5 flex flex-col" style="width:220px; flex-shrink:0;">
+                            <p class="text-white font-semibold text-[13px] mb-1">Perfect AI Tool</p>
+                            <div class="mb-1.5"><span class="text-yellow-400 text-[11px]">★★★★★</span></div>
+                            <p class="text-[#888] text-[11px] leading-relaxed flex-1">It's a great time-saver to access all the latest AI models through a simple interface.</p>
+                            <div class="flex items-center gap-2 mt-3"><img src="https://i.pravatar.cc/48?img=5" class="w-6 h-6 rounded-full object-cover" /><div><p class="text-white text-[11px] font-medium">Sophia Brown</p><p class="text-[#555] text-[9px]">Customer Support</p></div></div>
+                        </div>
+                        <div class="bg-[#141414] border border-[#222] rounded-xl p-5 flex flex-col" style="width:220px; flex-shrink:0;">
+                            <p class="text-white font-semibold text-[13px] mb-1">Very Cool</p>
+                            <div class="mb-1.5"><span class="text-yellow-400 text-[11px]">★★★★★</span></div>
+                            <p class="text-[#888] text-[11px] leading-relaxed flex-1">It is an amazing app for generating fun and useful content and creating great ideas!</p>
+                            <div class="flex items-center gap-2 mt-3"><img src="https://i.pravatar.cc/48?img=14" class="w-6 h-6 rounded-full object-cover" /><div><p class="text-white text-[11px] font-medium">William Davis</p><p class="text-[#555] text-[9px]">Software Developer</p></div></div>
+                        </div>
+                        <div class="bg-[#141414] border border-[#222] rounded-xl p-5 flex flex-col" style="width:220px; flex-shrink:0;">
+                            <p class="text-white font-semibold text-[13px] mb-1">Crazy Good!</p>
+                            <div class="mb-1.5"><span class="text-yellow-400 text-[11px]">★★★★★</span></div>
+                            <p class="text-[#888] text-[11px] leading-relaxed flex-1">It's insane how advanced and helpful this is, and the feedback you get from it can really inspire you.</p>
+                            <div class="flex items-center gap-2 mt-3"><img src="https://i.pravatar.cc/48?img=9" class="w-6 h-6 rounded-full object-cover" /><div><p class="text-white text-[11px] font-medium">Isabella Garcia</p><p class="text-[#555] text-[9px]">Data Analyst</p></div></div>
+                        </div>
+                        <div class="bg-[#141414] border border-[#222] rounded-xl p-5 flex flex-col" style="width:220px; flex-shrink:0;">
+                            <p class="text-white font-semibold text-[13px] mb-1">Mind Blowing</p>
+                            <div class="mb-1.5"><span class="text-yellow-400 text-[11px]">★★★★★</span></div>
+                            <p class="text-[#888] text-[11px] leading-relaxed flex-1">Hands down the best AI chatbot I've ever used. The responses are incredibly accurate and helpful.</p>
+                            <div class="flex items-center gap-2 mt-3"><img src="https://i.pravatar.cc/48?img=15" class="w-6 h-6 rounded-full object-cover" /><div><p class="text-white text-[11px] font-medium">James Wilson</p><p class="text-[#555] text-[9px]">Entrepreneur</p></div></div>
+                        </div>
+                        <div class="bg-[#141414] border border-[#222] rounded-xl p-5 flex flex-col" style="width:220px; flex-shrink:0;">
+                            <p class="text-white font-semibold text-[13px] mb-1">A Must Have</p>
+                            <div class="mb-1.5"><span class="text-yellow-400 text-[11px]">★★★★★</span></div>
+                            <p class="text-[#888] text-[11px] leading-relaxed flex-1">I use this every single day. It helps me write, brainstorm, and solve problems faster than ever.</p>
+                            <div class="flex items-center gap-2 mt-3"><img src="https://i.pravatar.cc/48?img=16" class="w-6 h-6 rounded-full object-cover" /><div><p class="text-white text-[11px] font-medium">Olivia Martinez</p><p class="text-[#555] text-[9px]">UX Designer</p></div></div>
+                        </div>
+                        <div class="bg-[#141414] border border-[#222] rounded-xl p-5 flex flex-col" style="width:220px; flex-shrink:0;">
+                            <p class="text-white font-semibold text-[13px] mb-1">Game Changer</p>
+                            <div class="mb-1.5"><span class="text-yellow-400 text-[11px]">★★★★★</span></div>
+                            <p class="text-[#888] text-[11px] leading-relaxed flex-1">This app completely changed how I work. The AI understands context perfectly every time.</p>
+                            <div class="flex items-center gap-2 mt-3"><img src="https://i.pravatar.cc/48?img=18" class="w-6 h-6 rounded-full object-cover" /><div><p class="text-white text-[11px] font-medium">Daniel Lee</p><p class="text-[#555] text-[9px]">Freelancer</p></div></div>
+                        </div>
+                        <div class="bg-[#141414] border border-[#222] rounded-xl p-5 flex flex-col" style="width:220px; flex-shrink:0;">
+                            <p class="text-white font-semibold text-[13px] mb-1">Best AI Ever</p>
+                            <div class="mb-1.5"><span class="text-yellow-400 text-[11px]">★★★★★</span></div>
+                            <p class="text-[#888] text-[11px] leading-relaxed flex-1">Tried many AI apps and this one is by far the best. Clean interface and incredibly smart responses.</p>
+                            <div class="flex items-center gap-2 mt-3"><img src="https://i.pravatar.cc/48?img=20" class="w-6 h-6 rounded-full object-cover" /><div><p class="text-white text-[11px] font-medium">Ava Robinson</p><p class="text-[#555] text-[9px]">Student</p></div></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right: Auth Card -->
+            <div style="width:420px; flex-shrink:0; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:48px;">
+
+            <!-- View 1: Signup -->
+            <div id="auth-signup-view">
+                <!-- Powered By -->
+                <p class="text-[#888] text-[13px] mb-4 text-center">Powered By</p>
+                <div class="flex items-center gap-8 bg-[#1e1e1e] border border-[#333] rounded-xl px-10 py-5 mb-8">
+                    <div class="flex items-center gap-2">
+                        <img src="https://img.icons8.com/ios11/512/FFFFFF/chatgpt.png" width="22" height="22" alt="OpenAI" />
+                        <span class="text-white text-[15px]">OpenAI</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <img src="https://raw.githubusercontent.com/lobehub/lobe-icons/refs/heads/master/packages/static-png/dark/claude-color.png" width="22" height="22" alt="Anthropic" />
+                        <span class="text-white text-[15px]">Anthropic</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <img src="https://raw.githubusercontent.com/lobehub/lobe-icons/refs/heads/master/packages/static-png/dark/gemini-color.png" width="22" height="22" alt="Google" />
+                        <span class="text-white text-[15px]">Google</span>
+                    </div>
+                </div>
+
+                <h2 class="text-white text-[26px] font-bold text-center leading-tight mb-8">Join Millions of<br>Happy Users</h2>
+
+                <!-- Google -->
+                <button id="google-login-btn" class="w-full flex items-center justify-center gap-2 bg-white text-black font-medium py-3.5 rounded-xl mb-4 hover:bg-gray-100 transition-colors text-[14px]">
+                    <svg width="18" height="18" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+                    Continue with Google
+                </button>
+
+                <!-- Apple -->
+                <button id="apple-login-btn" class="w-full flex items-center justify-center gap-2 bg-[#1e1e1e] text-white border border-[#333] font-medium py-3.5 rounded-xl mb-6 hover:bg-[#252525] transition-colors text-[14px]">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="white"><path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.4C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/></svg>
+                    Continue with Apple
+                </button>
+
+                <!-- Divider -->
+                <div class="flex items-center gap-3 w-full mb-6">
+                    <div class="flex-1 h-px bg-[#333]"></div>
+                    <span class="text-[#666] text-[13px]">or</span>
+                    <div class="flex-1 h-px bg-[#333]"></div>
+                </div>
+
+                <!-- Email -->
+                <input id="ghost-email-input" type="email" placeholder="Enter your email" class="w-full bg-[#1e1e1e] border border-[#333] text-white rounded-xl px-5 py-3.5 text-[14px] outline-none placeholder-[#555] mb-4 focus:border-[#444]" />
+                <button id="ghost-email-btn" class="w-full flex items-center justify-center gap-2 bg-[#1e1e1e] text-white border border-[#333] font-medium py-3.5 rounded-xl mb-8 hover:bg-[#252525] transition-colors text-[14px]">
+                    <img src="image.png" width="18" height="18" alt="Email" style="filter: invert(1);" />
+                    Continue with Email
+                </button>
+
+                <!-- Terms -->
+                <p class="text-[#666] text-[11px] text-center leading-relaxed">By proceeding, you agree to our <span class="underline cursor-pointer">Terms of Service</span> and acknowledge that you have read our <span class="underline cursor-pointer">Privacy Policy</span>.</p>
+            </div>
+
+            <!-- View 2: Email + Password (hidden by default) -->
+            <div id="auth-password-view" style="display:none; width:100%;">
+                <!-- Powered By -->
+                <p class="text-[#888] text-[13px] mb-4 text-center">Powered By</p>
+                <div class="flex items-center justify-center gap-8 bg-[#1e1e1e] border border-[#333] rounded-xl px-10 py-5 mb-8">
+                    <div class="flex items-center gap-2">
+                        <img src="https://img.icons8.com/ios11/512/FFFFFF/chatgpt.png" width="22" height="22" alt="OpenAI" />
+                        <span class="text-white text-[15px]">OpenAI</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <img src="https://raw.githubusercontent.com/lobehub/lobe-icons/refs/heads/master/packages/static-png/dark/claude-color.png" width="22" height="22" alt="Anthropic" />
+                        <span class="text-white text-[15px]">Anthropic</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <img src="https://raw.githubusercontent.com/lobehub/lobe-icons/refs/heads/master/packages/static-png/dark/gemini-color.png" width="22" height="22" alt="Google" />
+                        <span class="text-white text-[15px]">Google</span>
+                    </div>
+                </div>
+
+                <h2 class="text-white text-[26px] font-bold text-center leading-tight mb-8">Join Millions of<br>Happy Users</h2>
+
+                <!-- Email address -->
+                <p class="text-[#ccc] text-[13px] font-semibold mb-2">Email address</p>
+                <input id="ghost-email-display" type="email" readonly class="w-full bg-[#1e1e1e] border border-[#333] text-white rounded-xl px-5 py-3.5 text-[14px] outline-none mb-5" />
+
+                <!-- Password -->
+                <p class="text-[#ccc] text-[13px] font-semibold mb-2">Password</p>
+                <div class="relative w-full" id="ghost-pw-wrapper">
+                    <input id="ghost-password" type="password" placeholder="Password" class="w-full bg-[#1e1e1e] border border-[#333] text-white rounded-xl px-5 py-3.5 text-[14px] outline-none placeholder-[#555] focus:border-[#444] pr-12" />
+                    <button id="ghost-toggle-pw" class="absolute right-4 top-1/2 -translate-y-1/2 text-[#666] hover:text-white transition-colors" type="button">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"></path><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+                    </button>
+                </div>
+
+                <!-- Password validation (only for register) -->
+                <div id="ghost-pw-hints" class="mt-3 mb-6" style="display:none;">
+                    <p id="pw-hint-empty" class="flex items-center gap-2 text-[13px] text-red-400 mb-1">
+                        <span>✕</span> Password can't be empty.
+                    </p>
+                    <p id="pw-hint-length" class="flex items-center gap-2 text-[13px] text-red-400">
+                        <span>✕</span> Must be at least 6 characters
+                    </p>
+                </div>
+
+                <div id="ghost-pw-spacer" class="mb-8"></div>
+
+                <!-- Auth error message -->
+                <p id="ghost-auth-error" class="text-red-400 text-[12px] text-center mb-4" style="display:none;"></p>
+
+                <!-- Continue -->
+                <button id="ghost-continue-btn" class="w-full bg-white text-black font-medium py-3.5 rounded-xl mb-6 hover:bg-gray-100 transition-colors text-[14px]">Continue</button>
+
+                <!-- Forgot password (only for login) -->
+                <p id="ghost-forgot-pw" class="text-center mb-8"><a href="#" class="text-[#888] text-[13px] hover:text-white hover:underline transition-colors">Forgot password</a></p>
+
+                <!-- Switch mode -->
+                <p class="text-center"><a href="#" id="ghost-back-signup" class="text-[#888] text-[13px] hover:text-white hover:underline transition-colors">Already have an account? Log in</a></p>
+            </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- Email Verification Popup -->
+    <div id="verify-backdrop" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.7); backdrop-filter:blur(6px); z-index:10000;"></div>
+    <div id="verify-popup" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); z-index:10001; width:520px; background:#0e0e0e; border:1px solid #222; border-radius:24px; padding:48px; box-shadow:0 25px 60px rgba(0,0,0,0.6);">
+        <!-- Close -->
+        <button id="verify-close" style="position:absolute; top:16px; right:16px; background:none; border:none; cursor:pointer; color:#888;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+
+        <div style="display:flex; flex-direction:column; align-items:center; text-align:center;">
+            <!-- Mail icon circle -->
+            <div style="width:72px; height:72px; background:#1a1a1a; border:1px solid #2a2a2a; border-radius:50%; display:flex; align-items:center; justify-content:center; margin-bottom:24px;">
+                <img src="image.png" width="32" height="32" alt="Email" style="filter: invert(1);" />
+            </div>
+
+            <!-- Title -->
+            <h2 style="margin:0 0 8px; font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; font-size:22px; font-weight:700; color:#ffffff;">
+                Check your email
+            </h2>
+
+            <!-- Subtitle -->
+            <p style="margin:0 0 4px; font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; font-size:14px; color:#888; line-height:1.6;">
+                We've sent a verification link to
+            </p>
+            <p id="verify-email-display" style="margin:0 0 28px; font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; font-size:15px; font-weight:600; color:#ffffff;">
+            </p>
+
+            <!-- Divider -->
+            <div style="width:100%; height:1px; background:#1a1a1a; margin-bottom:24px;"></div>
+
+            <!-- Info steps -->
+            <div style="width:100%; text-align:left; margin-bottom:28px;">
+                <div style="display:flex; align-items:flex-start; gap:12px; margin-bottom:16px;">
+                    <div style="width:28px; height:28px; background:#1a1a1a; border:1px solid #2a2a2a; border-radius:50%; display:flex; align-items:center; justify-content:center; flex-shrink:0; font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; font-size:12px; font-weight:700; color:#fff;">1</div>
+                    <p style="margin:4px 0 0; font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; font-size:13px; color:#888; line-height:1.5;">Open your email inbox</p>
+                </div>
+                <div style="display:flex; align-items:flex-start; gap:12px; margin-bottom:16px;">
+                    <div style="width:28px; height:28px; background:#1a1a1a; border:1px solid #2a2a2a; border-radius:50%; display:flex; align-items:center; justify-content:center; flex-shrink:0; font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; font-size:12px; font-weight:700; color:#fff;">2</div>
+                    <p style="margin:4px 0 0; font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; font-size:13px; color:#888; line-height:1.5;">Click the verification link in the email from Retrac</p>
+                </div>
+                <div style="display:flex; align-items:flex-start; gap:12px;">
+                    <div style="width:28px; height:28px; background:#1a1a1a; border:1px solid #2a2a2a; border-radius:50%; display:flex; align-items:center; justify-content:center; flex-shrink:0; font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; font-size:12px; font-weight:700; color:#fff;">3</div>
+                    <p style="margin:4px 0 0; font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; font-size:13px; color:#888; line-height:1.5;">Come back here and log in</p>
+                </div>
+            </div>
+
+            <!-- Resend button -->
+            <button id="verify-resend" style="width:100%; padding:14px; background:#1e1e1e; border:1px solid #333; border-radius:12px; color:#fff; font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; font-size:14px; font-weight:500; cursor:pointer; margin-bottom:16px; transition:background 0.2s;" onmouseover="this.style.background='#252525'" onmouseout="this.style.background='#1e1e1e'">
+                Resend verification email
+            </button>
+
+            <!-- Open email -->
+            <a href="https://mail.google.com" target="_blank" style="display:block; width:100%; padding:14px; background:#ffffff; border:none; border-radius:12px; color:#000000; font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; font-size:14px; font-weight:600; cursor:pointer; text-decoration:none; text-align:center; box-sizing:border-box; margin-bottom:20px;">
+                Open Gmail
+            </a>
+
+            <!-- Footer note -->
+            <p style="margin:0; font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; font-size:11px; color:#555; line-height:1.5;">
+                Didn't receive the email? Check your spam folder or
+                <a href="#" id="verify-try-again" style="color:#888; text-decoration:underline;">try a different email</a>.
+            </p>
+        </div>
+    </div>
+
+    <script>
+        // ========== LOCAL AUTH (localStorage) ==========
+        function getUsers() {
+            return JSON.parse(localStorage.getItem('retrac_users') || '{}');
+        }
+        function saveUsers(users) {
+            localStorage.setItem('retrac_users', JSON.stringify(users));
+        }
+        function getCurrentUser() {
+            return JSON.parse(localStorage.getItem('retrac_current_user') || 'null');
+        }
+        function setCurrentUser(user) {
+            localStorage.setItem('retrac_current_user', JSON.stringify(user));
+        }
+        function logoutUser() {
+            localStorage.removeItem('retrac_current_user');
+            location.reload();
+        }
+        function checkEmailExists(email) {
+            return !!getUsers()[email];
+        }
+        function registerUser(email, password) {
+            const users = getUsers();
+            if (users[email]) return { error: 'Account already exists.' };
+            users[email] = { email, password, createdAt: Date.now() };
+            saveUsers(users);
+            setCurrentUser({ email });
+            return { error: null };
+        }
+        function loginUser(email, password) {
+            const users = getUsers();
+            if (!users[email]) return { error: 'No account found with this email.' };
+            if (users[email].password !== password) return { error: 'Wrong password. Please try again.' };
+            setCurrentUser({ email });
+            return { error: null };
+        }
+
+        // ========== Chat Storage ==========
+        function getChats() {
+            const user = getCurrentUser();
+            if (!user) return [];
+            return JSON.parse(localStorage.getItem('retrac_chats_' + user.email) || '[]');
+        }
+        function saveChats(chats) {
+            const user = getCurrentUser();
+            if (!user) return;
+            localStorage.setItem('retrac_chats_' + user.email, JSON.stringify(chats));
+        }
+
+        // ========== Ghost Popup ==========
+        const ghostBackdrop = document.getElementById('ghost-backdrop');
+        const ghostCard = document.getElementById('ghost-card');
+        const signupView = document.getElementById('auth-signup-view');
+        const passwordView = document.getElementById('auth-password-view');
+        const ghostEmailInput = document.getElementById('ghost-email-input');
+        const ghostEmailDisplay = document.getElementById('ghost-email-display');
+        const ghostPassword = document.getElementById('ghost-password');
+        const ghostPwHints = document.getElementById('ghost-pw-hints');
+        const ghostPwSpacer = document.getElementById('ghost-pw-spacer');
+        const ghostForgotPw = document.getElementById('ghost-forgot-pw');
+        const ghostAuthError = document.getElementById('ghost-auth-error');
+        const ghostContinueBtn = document.getElementById('ghost-continue-btn');
+        const ghostBackBtn = document.getElementById('ghost-back-signup');
+        const pwHintEmpty = document.getElementById('pw-hint-empty');
+        const pwHintLength = document.getElementById('pw-hint-length');
+        const ghostPwWrapper = document.getElementById('ghost-pw-wrapper');
+
+        let authMode = 'login';
+        let currentEmail = '';
+
+        // Ghost button: incognito toggle when logged in, login popup when not
+        let incognitoMode = false;
+
+        document.getElementById('ghost-btn').addEventListener('click', () => {
+            const user = getCurrentUser();
+            if (!user) {
+                // Not logged in — show login popup
+                ghostBackdrop.style.display = 'block';
+                ghostCard.style.display = 'block';
+                return;
+            }
+
+            // Toggle incognito mode
+            incognitoMode = !incognitoMode;
+            const banner = document.getElementById('incognito-banner');
+            const ghostIcon = document.getElementById('ghost-btn');
+
+            if (incognitoMode) {
+                banner.classList.remove('hidden');
+                banner.classList.add('flex');
+                ghostIcon.classList.remove('text-[#8e8e8e]');
+                ghostIcon.classList.add('text-white');
+            } else {
+                banner.classList.add('hidden');
+                banner.classList.remove('flex');
+                ghostIcon.classList.add('text-[#8e8e8e]');
+                ghostIcon.classList.remove('text-white');
+            }
+        });
+
+        function closeGhostPopup() {
+            ghostBackdrop.style.display = 'none';
+            ghostCard.style.display = 'none';
+            passwordView.style.display = 'none';
+            signupView.style.display = 'block';
+            ghostEmailInput.value = '';
+            ghostPassword.value = '';
+            ghostAuthError.style.display = 'none';
+            ghostPassword.classList.remove('border-red-500');
+            ghostPassword.classList.add('border-[#333]');
+        }
+
+        document.getElementById('ghost-close').addEventListener('click', closeGhostPopup);
+        ghostBackdrop.addEventListener('click', closeGhostPopup);
+
+        function showPasswordView(mode) {
+            authMode = mode;
+            signupView.style.display = 'none';
+            passwordView.style.display = 'block';
+            ghostPassword.value = '';
+            ghostAuthError.style.display = 'none';
+            ghostPassword.classList.remove('border-red-500');
+            ghostPassword.classList.add('border-[#333]');
+
+            if (mode === 'register') {
+                ghostPwHints.style.display = 'block';
+                ghostPwSpacer.style.display = 'none';
+                ghostForgotPw.style.display = 'none';
+                ghostBackBtn.textContent = 'Already have an account? Log in';
+            } else {
+                ghostPwHints.style.display = 'none';
+                ghostPwSpacer.style.display = 'block';
+                ghostForgotPw.style.display = 'block';
+                ghostBackBtn.textContent = "Don't have an account? Sign up";
+            }
+            ghostPassword.focus();
+        }
+
+        // Email continue button — check locally if email exists
+        document.getElementById('ghost-email-btn').addEventListener('click', () => {
+            const email = ghostEmailInput.value.trim();
+            if (!email || !email.includes('@')) return;
+            currentEmail = email;
+            ghostEmailDisplay.value = email;
+            showPasswordView(checkEmailExists(email) ? 'login' : 'register');
+        });
+
+        ghostEmailInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') document.getElementById('ghost-email-btn').click();
+        });
+
+        // Password validation hints
+        ghostPassword.addEventListener('input', () => {
+            if (authMode !== 'register') return;
+            const pw = ghostPassword.value;
+
+            if (pw.length > 0) {
+                pwHintEmpty.classList.remove('text-red-400');
+                pwHintEmpty.classList.add('text-green-400');
+                pwHintEmpty.querySelector('span').textContent = '✓';
+            } else {
+                pwHintEmpty.classList.remove('text-green-400');
+                pwHintEmpty.classList.add('text-red-400');
+                pwHintEmpty.querySelector('span').textContent = '✕';
+            }
+
+            if (pw.length >= 6) {
+                pwHintLength.classList.remove('text-red-400');
+                pwHintLength.classList.add('text-green-400');
+                pwHintLength.querySelector('span').textContent = '✓';
+            } else {
+                pwHintLength.classList.remove('text-green-400');
+                pwHintLength.classList.add('text-red-400');
+                pwHintLength.querySelector('span').textContent = '✕';
+            }
+
+            if (pw.length > 0 && pw.length < 6) {
+                ghostPassword.classList.remove('border-[#333]');
+                ghostPassword.classList.add('border-red-500');
+            } else {
+                ghostPassword.classList.remove('border-red-500');
+                ghostPassword.classList.add('border-[#333]');
+            }
+        });
+
+        // Continue (login or register)
+        ghostContinueBtn.addEventListener('click', () => {
+            const pw = ghostPassword.value;
+            ghostAuthError.style.display = 'none';
+
+            if (!pw) {
+                ghostAuthError.textContent = 'Please enter a password.';
+                ghostAuthError.style.display = 'block';
+                return;
+            }
+            if (authMode === 'register' && pw.length < 6) {
+                ghostAuthError.textContent = 'Password must be at least 6 characters.';
+                ghostAuthError.style.display = 'block';
+                return;
+            }
+
+            if (authMode === 'login') {
+                const result = loginUser(currentEmail, pw);
+                if (result.error) {
+                    ghostAuthError.textContent = result.error;
+                    ghostAuthError.style.display = 'block';
+                } else {
+                    closeGhostPopup();
+                    showLoggedInUI({ email: currentEmail });
+                }
+            } else {
+                const result = registerUser(currentEmail, pw);
+                if (result.error) {
+                    ghostAuthError.textContent = result.error;
+                    ghostAuthError.style.display = 'block';
+                    if (result.error.includes('already exists')) {
+                        showPasswordView('login');
+                        ghostPassword.value = pw;
+                    }
+                } else {
+                    closeGhostPopup();
+                    showLoggedInUI({ email: currentEmail });
+                }
+            }
+        });
+
+        ghostPassword.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') ghostContinueBtn.click();
+        });
+
+        ghostBackBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            showPasswordView(authMode === 'register' ? 'login' : 'register');
+        });
+
+        // Show logged-in UI
+        function showLoggedInUI(user) {
+            closeGhostPopup();
+            const sidebarAuth = document.getElementById('sidebar-auth');
+            if (!sidebarAuth) return;
+            const userEmail = user.email;
+            const userName = user.name || userEmail.split('@')[0];
+            const initial = userName[0].toUpperCase();
+            const avatarHTML = user.picture
+                ? `<img src="${user.picture}" class="w-9 h-9 rounded-full object-cover shrink-0" referrerpolicy="no-referrer" />`
+                : `<div class="w-9 h-9 rounded-full bg-[#333] flex items-center justify-center text-white text-[14px] font-semibold shrink-0">${initial}</div>`;
+
+            sidebarAuth.innerHTML = `
+                <div class="bg-[#2D8CFF] rounded-2xl p-4 flex items-center justify-between mb-3 cursor-pointer hover:brightness-110 transition">
+                    <div class="flex items-center gap-3">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="white" stroke="none">
+                            <path d="M12 2L9.19 8.63L2 9.24L7.46 13.97L5.82 21L12 17.27L18.18 21L16.54 13.97L22 9.24L14.81 8.63L12 2Z"/>
+                        </svg>
+                        <div>
+                            <p class="text-white text-[14px] font-bold leading-tight">Go Pro</p>
+                            <p class="text-white/70 text-[11px]">Upgrade your plan</p>
+                        </div>
+                    </div>
+                    <div class="bg-white text-[#2D8CFF] text-[12px] font-semibold px-4 py-1.5 rounded-full">Upgrade</div>
+                </div>
+                <div style="height:1px; background:#2a2a2a; margin:4px 0;"></div>
+                <div class="relative">
+                    <div id="profile-btn" class="flex items-center gap-3 px-1 py-2 cursor-pointer hover:bg-[#232323] rounded-lg transition-colors">
+                        ${avatarHTML}
+                        <div class="flex-1 min-w-0">
+                            <p class="text-white text-[14px] font-medium truncate">${userName}</p>
+                            <p class="text-[#666] text-[11px]">Free</p>
+                        </div>
+                    </div>
+                    <div id="profile-dropdown" style="display:none; position:absolute; bottom:100%; left:0; right:0; margin-bottom:8px; background:#1a1a1a; border:1px solid #2a2a2a; border-radius:16px; padding:8px 0; box-shadow:0 15px 40px rgba(0,0,0,0.5); z-index:100;">
+                        <div class="flex items-center gap-3 px-4 py-3" style="border-radius:16px 16px 0 0;">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                            <span class="text-[#888] text-[14px]">${userEmail}</span>
+                        </div>
+                        <a href="#" class="flex items-center gap-3 px-4 py-3 hover:bg-[#232323] transition-colors"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg><span class="text-white text-[14px]">Settings</span></a>
+                        <a href="#" class="flex items-center gap-3 px-4 py-3 hover:bg-[#232323] transition-colors"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="2"></rect><rect x="14" y="3" width="7" height="7" rx="2"></rect><rect x="14" y="14" width="7" height="7" rx="2"></rect><rect x="3" y="14" width="7" height="7" rx="2"></rect></svg><span class="text-white text-[14px]">Apps</span></a>
+                        <a href="#" class="flex items-center gap-3 px-4 py-3 hover:bg-[#232323] transition-colors"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path></svg><span class="text-white text-[14px]">Upgrade Plan</span></a>
+                        <a href="#" class="flex items-center gap-3 px-4 py-3 hover:bg-[#232323] transition-colors"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg><span class="text-white text-[14px]">Report Issue</span></a>
+                        <a href="#" class="flex items-center gap-3 px-4 py-3 hover:bg-[#232323] transition-colors"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg><span class="text-white text-[14px]">Help & FAQ</span></a>
+                        <a href="#" class="flex items-center gap-3 px-4 py-3 hover:bg-[#232323] transition-colors"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg><span class="text-white text-[14px]">Terms & Policies</span></a>
+                        <div style="height:1px; background:#2a2a2a; margin:4px 0;"></div>
+                        <button id="logout-btn" class="w-full flex items-center gap-3 px-4 py-3 hover:bg-[#232323] transition-colors text-left"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg><span class="text-red-500 text-[14px]">Log Out</span></button>
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('profile-btn')?.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const dd = document.getElementById('profile-dropdown');
+                dd.style.display = dd.style.display === 'none' ? 'block' : 'none';
+            });
+            document.addEventListener('click', (e) => {
+                const dd = document.getElementById('profile-dropdown');
+                if (dd && !dd.contains(e.target)) dd.style.display = 'none';
+            });
+            document.getElementById('logout-btn')?.addEventListener('click', logoutUser);
+        }
+
+        // Auto-login on page load if user is saved
+        const savedUser = getCurrentUser();
+        if (savedUser) showLoggedInUI(savedUser);
+
+        // ========== Search Chat Popup ==========
+        const searchBackdrop = document.getElementById('search-backdrop');
+        const searchPopup = document.getElementById('search-popup');
+        const searchInput = document.getElementById('search-input');
+
+        document.getElementById('search-chat-btn').addEventListener('click', (e) => {
+            e.preventDefault();
+            searchBackdrop.style.display = 'block';
+            searchPopup.style.display = 'flex';
+            searchInput.value = '';
+            searchInput.focus();
+        });
+
+        function closeSearch() {
+            searchBackdrop.style.display = 'none';
+            searchPopup.style.display = 'none';
+        }
+
+        document.getElementById('search-close').addEventListener('click', closeSearch);
+        searchBackdrop.addEventListener('click', closeSearch);
+
+        // Close on Escape
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && searchPopup.style.display === 'flex') {
+                closeSearch();
+            }
+        });
+
+        // Filter search results
+        searchInput.addEventListener('input', () => {
+            const query = searchInput.value.toLowerCase();
+            document.querySelectorAll('.search-item').forEach(item => {
+                const text = item.textContent.toLowerCase();
+                item.style.display = text.includes(query) ? '' : 'none';
+            });
+        });
+
+        // Toggle password visibility
+        document.getElementById('ghost-toggle-pw').addEventListener('click', () => {
+            ghostPassword.type = ghostPassword.type === 'password' ? 'text' : 'password';
+        });
+
+        // ========== Google Sign-In ==========
+        const GOOGLE_CLIENT_ID = '1002474250480-t1937sr0esof50t8e0ai9gbipgku672j.apps.googleusercontent.com';
+
+        function handleGoogleCredential(response) {
+            // Decode JWT token to get user info
+            const payload = JSON.parse(atob(response.credential.split('.')[1]));
+            const email = payload.email;
+            const name = payload.name || email.split('@')[0];
+            const picture = payload.picture || null;
+
+            // Register/login user locally
+            const users = getUsers();
+            if (!users[email]) {
+                users[email] = { email, name, picture, provider: 'google', createdAt: Date.now() };
+                saveUsers(users);
+            }
+            setCurrentUser({ email, name, picture, provider: 'google' });
+            closeGhostPopup();
+            showLoggedInUI({ email, name, picture, provider: 'google' });
+        }
+
+        // Google login — use GIS ID token flow (works without redirect URI config)
+        let googleInitialized = false;
+
+        window.addEventListener('load', () => {
+            if (window.google?.accounts?.id) {
+                google.accounts.id.initialize({
+                    client_id: GOOGLE_CLIENT_ID,
+                    callback: handleGoogleCredential,
+                    ux_mode: 'popup',
+                    context: 'signin'
+                });
+                googleInitialized = true;
+            }
+        });
+
+        // Helper for token client fallback
+        function createGoogleTokenClient() {
+            return google.accounts.oauth2.initTokenClient({
+                client_id: GOOGLE_CLIENT_ID,
+                scope: 'email profile',
+                callback: async (tokenResponse) => {
+                    if (tokenResponse.access_token) {
+                        const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+                            headers: { Authorization: 'Bearer ' + tokenResponse.access_token }
+                        });
+                        const payload = await res.json();
+                        const email = payload.email;
+                        const name = payload.name || email.split('@')[0];
+                        const picture = payload.picture || null;
+                        const users = getUsers();
+                        if (!users[email]) {
+                            users[email] = { email, name, picture, provider: 'google', createdAt: Date.now() };
+                            saveUsers(users);
+                        }
+                        setCurrentUser({ email, name, picture, provider: 'google' });
+                        closeGhostPopup();
+                        showLoggedInUI({ email, name, picture, provider: 'google' });
+                    }
+                }
+            });
+        }
+
+        document.getElementById('google-login-btn')?.addEventListener('click', () => {
+            if (googleInitialized && window.google?.accounts?.id) {
+                // Try One Tap first, fallback to token client
+                google.accounts.id.prompt((notification) => {
+                    if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+                        if (window.google?.accounts?.oauth2) {
+                            createGoogleTokenClient().requestAccessToken();
+                        }
+                    }
+                });
+            } else if (window.google?.accounts?.oauth2) {
+                createGoogleTokenClient().requestAccessToken();
+            }
+        });
+
+        // Apple login (no backend = custom styled popup)
+        document.getElementById('apple-login-btn')?.addEventListener('click', () => {
+            RetracSettingsModal._showConfirm && RetracSettingsModal.inject();
+            const overlay = document.createElement('div');
+            overlay.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.5);z-index:20000;display:flex;align-items:center;justify-content:center;';
+            overlay.innerHTML = '<div style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:16px;padding:24px;width:400px;box-shadow:0 20px 50px rgba(0,0,0,0.5);"><p style="color:white;font-size:15px;margin-bottom:6px;font-weight:600;">Apple Sign-In</p><p style="color:#888;font-size:13px;margin-bottom:20px;">Apple Sign-In is currently unavaible. Please use Google or Email login instead.</p><div style="display:flex;justify-content:flex-end;"><button class="close-btn" style="background:#2a2a2a;color:white;border:none;border-radius:10px;padding:8px 20px;font-size:13px;cursor:pointer;">OK</button></div></div>';
+            overlay.querySelector('.close-btn').addEventListener('click', () => overlay.remove());
+            overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+            document.body.appendChild(overlay);
+        });
+
+        const dropZone = document.getElementById('drop-zone');
+        const attachedFiles = document.getElementById('attached-files');
+        let dragCounter = 0;
+
+        document.addEventListener('dragenter', (e) => {
+            // Only show drop zone for file drags, not text selection drags
+            if (e.dataTransfer && e.dataTransfer.types.includes('Files')) {
+                e.preventDefault();
+                dragCounter++;
+                dropZone.classList.remove('hidden');
+                dropZone.classList.add('flex');
+            }
+        });
+
+        document.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            dragCounter--;
+            if (dragCounter === 0) {
+                dropZone.classList.add('hidden');
+                dropZone.classList.remove('flex');
+            }
+        });
+
+        document.addEventListener('dragover', (e) => {
+            if (e.dataTransfer && e.dataTransfer.types.includes('Files')) {
+                e.preventDefault();
+            }
+        });
+
+        document.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dragCounter = 0;
+            dropZone.classList.add('hidden');
+            dropZone.classList.remove('flex');
+
+            // Only accept file drops, not text
+            if (!e.dataTransfer || !e.dataTransfer.files.length) return;
+            for (const file of e.dataTransfer.files) {
+                addFilePill(file.name);
+            }
+        });
+
+        // Model Dropdown
+        const modelBtn = document.getElementById('model-selector-btn');
+        const modelDropdown = document.getElementById('model-dropdown');
+        const modelLabel = document.getElementById('model-selector-label');
+        const modelSearch = document.getElementById('model-search');
+
+        // Model icons map
+        const modelIcons = {
+            'Claude Sonnet 4.5': `<img src="https://raw.githubusercontent.com/lobehub/lobe-icons/refs/heads/master/packages/static-png/dark/claude-color.png" width="16" height="16" alt="Claude" />`,
+            'Gemini 3 Pro': `<img src="https://raw.githubusercontent.com/lobehub/lobe-icons/refs/heads/master/packages/static-png/dark/gemini-color.png" width="16" height="16" alt="Gemini" />`,
+            'GPT-5.1': `<img src="https://img.icons8.com/ios11/512/FFFFFF/chatgpt.png" width="16" height="16" alt="GPT" />`,
+            'GPT-5.2': `<img src="https://img.icons8.com/ios11/512/FFFFFF/chatgpt.png" width="16" height="16" alt="GPT" />`
+        };
+        const modelIcon = document.getElementById('model-selector-icon');
+
+        function openDropdown() {
+            modelDropdown.classList.remove('dropdown-hidden');
+            modelDropdown.classList.add('dropdown-visible');
+            modelSearch.focus();
+        }
+        function closeDropdown() {
+            modelDropdown.classList.remove('dropdown-visible');
+            modelDropdown.classList.add('dropdown-hidden');
+        }
+
+        modelBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isOpen = modelDropdown.classList.contains('dropdown-visible');
+            isOpen ? closeDropdown() : openDropdown();
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!modelDropdown.contains(e.target) && !modelBtn.contains(e.target)) {
+                closeDropdown();
+            }
+        });
+
+        // Model selection
+        document.querySelectorAll('.model-option').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const model = btn.dataset.model;
+                modelLabel.textContent = model;
+                // Update button icon
+                if (modelIcons[model]) {
+                    modelIcon.innerHTML = modelIcons[model];
+                }
+                // Update active state
+                document.querySelectorAll('.model-option').forEach(b => {
+                    b.classList.remove('bg-[#1a3a5c]');
+                    b.classList.add('hover:bg-[#353535]');
+                    const check = b.querySelector('.checkmark-icon');
+                    if (check) check.remove();
+                });
+                btn.classList.add('bg-[#1a3a5c]');
+                btn.classList.remove('hover:bg-[#353535]');
+                // Add checkmark
+                const checkSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                checkSvg.setAttribute('width', '18');
+                checkSvg.setAttribute('height', '18');
+                checkSvg.setAttribute('viewBox', '0 0 24 24');
+                checkSvg.setAttribute('fill', 'none');
+                checkSvg.setAttribute('stroke', 'white');
+                checkSvg.setAttribute('stroke-width', '2.5');
+                checkSvg.setAttribute('stroke-linecap', 'round');
+                checkSvg.setAttribute('stroke-linejoin', 'round');
+                checkSvg.classList.add('ml-auto', 'checkmark-icon');
+                checkSvg.innerHTML = '<polyline points="20 6 9 17 4 12"></polyline>';
+                btn.appendChild(checkSvg);
+
+                closeDropdown();
+            });
+        });
+
+        // Mark initial checkmark
+        document.querySelector('.model-option[data-model="Gemini 3 Pro"] svg.ml-auto')?.classList.add('checkmark-icon');
+
+        // Model search filter
+        modelSearch.addEventListener('input', () => {
+            const query = modelSearch.value.toLowerCase();
+            document.querySelectorAll('.model-option').forEach(btn => {
+                const name = btn.dataset.model.toLowerCase();
+                btn.style.display = name.includes(query) ? '' : 'none';
+            });
+        });
+
+        // Toggle switches (animated)
+        function setupToggle(toggle) {
+            toggle.addEventListener('click', () => {
+                const dot = toggle.querySelector('.toggle-dot');
+                const isOn = toggle.classList.contains('on');
+                if (isOn) {
+                    toggle.classList.remove('on', 'bg-[#3b82f6]');
+                    toggle.classList.add('bg-[#4a4a4a]');
+                    dot.style.transform = 'translateX(0)';
+                    dot.classList.remove('bg-white');
+                    dot.classList.add('bg-[#888]');
+                } else {
+                    toggle.classList.add('on', 'bg-[#3b82f6]');
+                    toggle.classList.remove('bg-[#4a4a4a]');
+                    dot.style.transform = 'translateX(16px)';
+                    dot.classList.remove('bg-[#888]');
+                    dot.classList.add('bg-white');
+                }
+            });
+        }
+
+        document.querySelectorAll('[data-toggle]').forEach(setupToggle);
+
+        // Ellipsis Dropdown
+        const ellipsisBtn = document.getElementById('ellipsis-btn');
+        const ellipsisDropdown = document.getElementById('ellipsis-dropdown');
+
+        ellipsisBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isOpen = ellipsisDropdown.classList.contains('dropdown-visible');
+            // Close model dropdown if open
+            closeDropdown();
+            if (isOpen) {
+                ellipsisDropdown.classList.remove('dropdown-visible');
+                ellipsisDropdown.classList.add('dropdown-hidden');
+            } else {
+                ellipsisDropdown.classList.remove('dropdown-hidden');
+                ellipsisDropdown.classList.add('dropdown-visible');
+            }
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!ellipsisDropdown.contains(e.target) && !ellipsisBtn.contains(e.target)) {
+                ellipsisDropdown.classList.remove('dropdown-visible');
+                ellipsisDropdown.classList.add('dropdown-hidden');
+            }
+        });
+
+        // Sidebar collapse
+        const sidebarEl = document.getElementById('sidebar');
+        document.getElementById('sidebar-toggle-btn').addEventListener('click', () => {
+            sidebarEl.classList.toggle('sidebar-collapsed');
+        });
+        sidebarEl.querySelector('.sidebar-logo')?.addEventListener('click', (e) => {
+            if (sidebarEl.classList.contains('sidebar-collapsed')) {
+                e.preventDefault();
+                sidebarEl.classList.remove('sidebar-collapsed');
+            }
+        });
+
+        // Recording UI
+        const micBtn = document.getElementById('mic-btn');
+        const recordingUI = document.getElementById('recording-ui');
+        const promptContainer = document.getElementById('prompt-container');
+        const recordingTimer = document.getElementById('recording-timer');
+        const recordingCancel = document.getElementById('recording-cancel');
+        const recordingPause = document.getElementById('recording-pause');
+        const recordingConfirm = document.getElementById('recording-confirm');
+        const pauseIcon = document.getElementById('pause-icon');
+        const playIcon = document.getElementById('play-icon');
+
+        let recordingInterval = null;
+        let recordingSeconds = 0;
+        let recordingPaused = false;
+        let audioContext = null;
+        let analyser = null;
+        let micStream = null;
+        let animFrameId = null;
+
+        // Generate waveform bars
+        const waveform = document.getElementById('waveform');
+        const barCount = 60;
+        const bars = [];
+        for (let i = 0; i < barCount; i++) {
+            const bar = document.createElement('div');
+            bar.className = 'wave-bar';
+            bar.style.height = '3px';
+            // Red at edges, white in middle
+            if (i < 6 || i > barCount - 7) {
+                bar.style.background = '#ef4444';
+                bar.style.opacity = '0.6';
+            }
+            waveform.appendChild(bar);
+            bars.push(bar);
+        }
+
+        function formatTime(totalSecs) {
+            const h = Math.floor(totalSecs / 3600);
+            const m = Math.floor((totalSecs % 3600) / 60);
+            const s = totalSecs % 60;
+            return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+        }
+
+        // Visualize microphone input
+        function visualize() {
+            if (!analyser) return;
+            const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+            function draw() {
+                animFrameId = requestAnimationFrame(draw);
+                if (recordingPaused) return;
+
+                analyser.getByteFrequencyData(dataArray);
+
+                // Calculate overall volume for breathing effect
+                let sum = 0;
+                for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
+                const avgVolume = sum / dataArray.length / 255; // 0-1
+
+                // Breathing scale on recording UI
+                const scale = 1 + avgVolume * 0.02;
+                recordingUI.style.transform = `scale(${scale})`;
+
+                // Map frequency data to bars
+                const step = Math.floor(dataArray.length / barCount);
+                for (let i = 0; i < barCount; i++) {
+                    // Bell curve weight: bars in middle get more height
+                    const center = barCount / 2;
+                    const dist = Math.abs(i - center) / center;
+                    const bellWeight = 1 - dist * dist * 0.6;
+
+                    // Sample frequency data
+                    const dataIndex = Math.min(i * step, dataArray.length - 1);
+                    const value = dataArray[dataIndex] / 255; // 0-1
+
+                    const height = Math.max(3, value * bellWeight * 44);
+                    bars[i].style.height = height + 'px';
+                }
+            }
+            draw();
+        }
+
+        async function startRecording() {
+            recordingSeconds = 0;
+            recordingPaused = false;
+            recordingTimer.textContent = formatTime(0);
+            pauseIcon.classList.remove('hidden');
+            playIcon.classList.add('hidden');
+
+            promptContainer.classList.add('hidden');
+            recordingUI.classList.remove('hidden');
+            recordingUI.classList.add('flex');
+
+            // Start microphone
+            try {
+                micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const source = audioContext.createMediaStreamSource(micStream);
+                analyser = audioContext.createAnalyser();
+                analyser.fftSize = 256;
+                analyser.smoothingTimeConstant = 0.7;
+                source.connect(analyser);
+                visualize();
+            } catch (err) {
+                console.warn('Microphone access denied, using silent mode');
+            }
+
+            recordingInterval = setInterval(() => {
+                if (!recordingPaused) {
+                    recordingSeconds++;
+                    recordingTimer.textContent = formatTime(recordingSeconds);
+                }
+            }, 1000);
+        }
+
+        function stopRecording() {
+            clearInterval(recordingInterval);
+            recordingInterval = null;
+
+            // Stop animation
+            if (animFrameId) {
+                cancelAnimationFrame(animFrameId);
+                animFrameId = null;
+            }
+
+            // Stop microphone
+            if (micStream) {
+                micStream.getTracks().forEach(t => t.stop());
+                micStream = null;
+            }
+            if (audioContext) {
+                audioContext.close();
+                audioContext = null;
+                analyser = null;
+            }
+
+            // Reset bars
+            bars.forEach(bar => bar.style.height = '3px');
+            recordingUI.style.transform = 'scale(1)';
+
+            recordingUI.classList.add('hidden');
+            recordingUI.classList.remove('flex');
+            promptContainer.classList.remove('hidden');
+        }
+
+        micBtn.addEventListener('click', startRecording);
+        recordingCancel.addEventListener('click', stopRecording);
+        recordingConfirm.addEventListener('click', stopRecording);
+
+        recordingPause.addEventListener('click', () => {
+            recordingPaused = !recordingPaused;
+            if (recordingPaused) {
+                pauseIcon.classList.add('hidden');
+                playIcon.classList.remove('hidden');
+            } else {
+                pauseIcon.classList.remove('hidden');
+                playIcon.classList.add('hidden');
+            }
+        });
+
+        document.getElementById('file-input').addEventListener('change', (e) => {
+            for (const file of e.target.files) {
+                addFilePill(file.name);
+            }
+            e.target.value = '';
+        });
+
+        const attachedWrapper = document.getElementById('attached-files-wrapper');
+        const scrollRightBtn = document.getElementById('scroll-right-btn');
+        const scrollLeftBtn = document.getElementById('scroll-left-btn');
+
+        function updateScrollBtns() {
+            const el = attachedFiles;
+            const canScrollRight = el.scrollLeft + el.clientWidth < el.scrollWidth - 1;
+            const canScrollLeft = el.scrollLeft > 0;
+
+            scrollRightBtn.classList.toggle('hidden', !canScrollRight);
+            scrollRightBtn.classList.toggle('flex', canScrollRight);
+            scrollLeftBtn.classList.toggle('hidden', !canScrollLeft);
+            scrollLeftBtn.classList.toggle('flex', canScrollLeft);
+
+            if (attachedFiles.children.length === 0) {
+                attachedWrapper.classList.add('hidden');
+                attachedWrapper.classList.remove('flex');
+            }
+        }
+
+        attachedFiles.addEventListener('scroll', updateScrollBtns);
+
+        function addFilePill(name) {
+            attachedWrapper.classList.remove('hidden');
+            attachedWrapper.classList.add('flex');
+
+            const pill = document.createElement('div');
+            pill.className = 'group/file flex items-center bg-[#464646] rounded-full px-3 py-1.5 border border-[#505050] relative shrink-0';
+            pill.innerHTML = `
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2 shrink-0">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                </svg>
+                <span class="text-[#e2e2e2] text-[14px] font-medium whitespace-nowrap">${name}</span>
+                <button class="ml-2 w-[20px] h-[20px] bg-[#5a5a5a] hover:bg-[#666666] rounded-full flex items-center justify-center text-white opacity-0 group-hover/file:opacity-100 transition-opacity cursor-pointer shrink-0">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            `;
+            pill.querySelector('button').addEventListener('click', () => {
+                pill.remove();
+                updateScrollBtns();
+            });
+            attachedFiles.appendChild(pill);
+            setTimeout(updateScrollBtns, 50);
+        }
+
+        // ========== CHAT ENGINE INITIALIZATION ==========
+
+        // Settings button
+        document.getElementById('settings-btn')?.addEventListener('click', () => {
+            RetracSettingsModal.open();
+        });
+
+        // Load chat from URL param
+        const urlParams = new URLSearchParams(window.location.search);
+        const chatIdParam = urlParams.get('chat');
+        if (chatIdParam) {
+            sessionStorage.setItem('retrac_current_chat_id', chatIdParam);
+        }
+
+        // Initialize chat UI
+        const chatInput = document.getElementById('chat-input');
+        const welcomeView = document.getElementById('welcome-view');
+        const chatMessagesOuter = document.getElementById('chat-messages');
+        const chatMessagesInner = document.getElementById('chat-messages-inner');
+
+        function showChatViewFn() {
+            welcomeView.style.display = 'none';
+            chatMessagesOuter.classList.remove('hidden');
+            chatMessagesOuter.style.display = '';
+        }
+
+        function hideChatViewFn() {
+            welcomeView.style.display = '';
+            chatMessagesOuter.classList.add('hidden');
+        }
+
+        RetracChatUI.init({
+            chatContainer: chatMessagesInner,
+            scrollContainer: chatMessagesOuter,
+            textarea: chatInput,
+            showChatView: showChatViewFn,
+            onChatCreated: (chat) => {
+                RetracChatUI.updateSidebarHistory();
+            }
+        });
+
+        // Hook incognito mode into chat history — skip saving when active
+        const _origAddMessage = RetracChatHistory.addMessage.bind(RetracChatHistory);
+        const _origCreateNew = RetracChatHistory.createNew.bind(RetracChatHistory);
+
+        RetracChatHistory.addMessage = function(chatId, role, content) {
+            if (incognitoMode) {
+                // Still track in-memory for the current session, but don't persist
+                if (RetracChatUI.currentChat) {
+                    RetracChatUI.currentChat.messages.push({ role, content, timestamp: Date.now() });
+                }
+                return RetracChatUI.currentChat;
+            }
+            return _origAddMessage(chatId, role, content);
+        };
+
+        RetracChatHistory.createNew = function(title) {
+            if (incognitoMode) {
+                // Create in-memory only, don't save to localStorage
+                const chat = {
+                    id: 'incognito_' + Date.now(),
+                    title: title || 'New Chat',
+                    messages: [],
+                    model: null,
+                    createdAt: Date.now(),
+                    updatedAt: Date.now()
+                };
+                sessionStorage.setItem('retrac_current_chat_id', chat.id);
+                return chat;
+            }
+            return _origCreateNew(title);
+        };
+
+        // Update sidebar history on load
+        RetracChatUI.updateSidebarHistory();
+
+        // Auth guard — require login for all main actions
+        function requireAuth() {
+            if (!getCurrentUser()) {
+                ghostBackdrop.style.display = 'block';
+                ghostCard.style.display = 'block';
+                return false;
+            }
+            return true;
+        }
+
+        // Send message handler
+        function handleSendMessage() {
+            if (!requireAuth()) return;
+            const text = chatInput.value.trim();
+            if (!text || RetracChatUI.isStreaming) return;
+            RetracChatUI.sendMessage(text);
+        }
+
+        document.getElementById('send-btn')?.addEventListener('click', handleSendMessage);
+
+        chatInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSendMessage();
+            }
+        });
+
+        // Auto-resize textarea
+        chatInput.addEventListener('input', () => {
+            chatInput.style.height = 'auto';
+            chatInput.style.height = Math.min(chatInput.scrollHeight, 200) + 'px';
+        });
+
+        // Model selection updates chat engine
+        document.querySelectorAll('.model-option').forEach(btn => {
+            btn.addEventListener('click', () => {
+                RetracChatUI.setModel(btn.dataset.model);
+            });
+        });
+
+        // New Chat button
+        document.querySelector('.sidebar-hide.flex.items-center.justify-between')?.addEventListener('click', (e) => {
+            if (e.target.closest('a')?.href?.includes('index.html') || e.target.closest('button')) {
+                if (window.location.pathname.endsWith('index.html') || window.location.pathname === '/') {
+                    e.preventDefault();
+                    RetracChatUI.newChat();
+                    hideChatViewFn();
+                    chatInput.focus();
+                }
+            }
+        });
+
+        // Ellipsis menu - Search Web toggle
+        let searchWebEnabled = false;
+        let deepResearchEnabled = false;
+
+        document.querySelector('#ellipsis-dropdown button:nth-child(2)')?.addEventListener('click', () => {
+            searchWebEnabled = !searchWebEnabled;
+            RetracSettings.set('searchWeb', searchWebEnabled);
+            const btn = document.querySelector('#ellipsis-dropdown button:nth-child(2)');
+            if (btn) btn.style.background = searchWebEnabled ? '#1a3a5c' : '';
+        });
+
+        document.querySelector('#ellipsis-dropdown button:nth-child(3)')?.addEventListener('click', () => {
+            deepResearchEnabled = !deepResearchEnabled;
+            RetracSettings.set('deepResearch', deepResearchEnabled);
+            const btn = document.querySelector('#ellipsis-dropdown button:nth-child(3)');
+            if (btn) btn.style.background = deepResearchEnabled ? '#1a3a5c' : '';
+        });
+
+        // Ctrl+O shortcut for new chat
+        document.addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'o') {
+                e.preventDefault();
+                RetracChatUI.newChat();
+                welcomeView.style.display = '';
+                chatMessagesOuter.style.display = 'none';
+                chatInput.focus();
+            }
+        });
+
+        // Inject settings modal
+        RetracSettingsModal.inject();
+
+        // Profile Settings link opens settings modal
+        document.addEventListener('click', (e) => {
+            const settingsLink = e.target.closest('#profile-dropdown a');
+            if (settingsLink && settingsLink.textContent.trim() === 'Settings') {
+                e.preventDefault();
+                RetracSettingsModal.open();
+            }
+        });
+
+        // Auth guard on interactive elements (not logged in → show login)
+        document.getElementById('mic-btn')?.addEventListener('click', (e) => {
+            if (!getCurrentUser()) { e.stopImmediatePropagation(); requireAuth(); }
+        }, true);
+
+        document.querySelector('#file-input')?.closest('button')?.addEventListener('click', (e) => {
+            if (!getCurrentUser()) { e.preventDefault(); e.stopImmediatePropagation(); requireAuth(); }
+        }, true);
+
+        // Guard textarea — show login on focus if not logged in
+        chatInput.addEventListener('focus', () => {
+            if (!getCurrentUser()) {
+                chatInput.blur();
+                requireAuth();
+            }
+        });
+
+        // Guard sidebar nav links (except actual page navigation)
+        document.querySelectorAll('#sidebar nav a[href="#"]').forEach(link => {
+            link.addEventListener('click', (e) => {
+                if (!getCurrentUser() && !link.id) {
+                    e.preventDefault();
+                    requireAuth();
+                }
+            });
+        });
+    </script>
+</body>
+</html>
