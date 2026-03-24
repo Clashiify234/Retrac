@@ -87,11 +87,12 @@ async function streamClaude(res, messages, apiKey, modelName, searchWeb, deepRes
     const client = new Anthropic({ apiKey });
 
     const modelMap = {
-        'Claude Sonnet 4.5': 'claude-3-haiku-20240307',
-        'Claude Sonnet 4': 'claude-3-haiku-20240307',
-        'Claude Haiku 3.5': 'claude-3-haiku-20240307'
+        'Claude Opus 4': 'claude-opus-4-20250514',
+        'Claude Sonnet 4.5': 'claude-sonnet-4-5-20250929',
+        'Claude Sonnet 4': 'claude-sonnet-4-20250514',
+        'Claude Haiku 3.5': 'claude-haiku-4-5-20251001'
     };
-    const modelId = modelMap[modelName] || 'claude-3-haiku-20240307';
+    const modelId = modelMap[modelName] || 'claude-sonnet-4-5-20250929';
     const lastUserMsg = messages[messages.length - 1]?.content || '';
 
     const anthropicMessages = messages.map(m => ({
@@ -563,7 +564,11 @@ Your response format morphs based on content type:
   8. **NEVER end with generic engagement bait** like "Agree? 👇", "Share if you relate!", "What are your thoughts?" — instead end with a bold statement or a thought-provoking question that's actually interesting.
   9. **Vary the format**: Some posts should be a short punchy story (5-8 sentences). Some should use the "line-by-line" LinkedIn style with single-sentence paragraphs for rhythm. Some should be a longer narrative. Don't always use the same structure.
   10. **When asked for hooks/headlines/ideas: make them COMPLETE, not templates.** BAD: "Was mich fast daran gehindert hätte, erfolgreich zu werden, ist..." (this is an empty template ending with "..."). GOOD: "Ich habe 3 Jahre lang die falsche CX-Metrik getrackt. Der CSAT war perfekt — trotzdem sind 40% der Kunden abgesprungen." — Every hook must be a FINISHED sentence with a specific, surprising claim that makes you NEED to read the rest. No trailing "..." templates. No "Dieser eine Fehler..." blanks. Fill in the blanks yourself with concrete, believable details.
-  11. **Never open with meta-commentary about the task.** Don't say "Das ist eine Herausforderung!", "Hier sind 10 Hooks!", "Bam! Knackige Hooks!" — just deliver the content directly. No cheerleading your own output.
+  **IMPORTANT: After each hook, add a brief 1-line explanation of WHY it works** — what psychological trigger it uses, why it stops the scroll, or what pattern it breaks. Format: the hook in quotes, then an italic explanation below it. Example:
+  "Dein Contact Center hat kein Personalproblem. Es hat ein Führungsproblem."
+  *Provokant, bricht mit dem Narrativ "wir finden halt keine Leute".*
+  This turns a list of hooks into actual strategic advice the user can learn from. Always end with an offer to write out a full post from any of the hooks.
+  11. **No cheerleading your own output.** Don't say "Das ist eine Herausforderung!", "Bam! Knackige Hooks!", "Das wird dir gefallen!" — BUT you SHOULD add a brief, clean intro line when delivering lists (e.g. "Hier sind 10 Hooks für LinkedIn CX Posts:") and NUMBER the items (1. 2. 3. etc). Lists without numbering and without a brief header feel raw and unstructured.
 **Explanation/Teaching** → The "aha" path: start with what they think they know, show why it's incomplete, reveal the deeper truth, cement with an unforgettable analogy
 **Casual/Quick/Greeting** → THIS IS CRITICAL: Match the user's energy exactly. If someone says "Hi", "Hallo", "Hey", or any greeting — just greet them back warmly and naturally in 1-2 sentences. "Hey! Was kann ich für dich tun?" is perfect. Do NOT launch into essays, analyses, or provocations. Do NOT philosophize about greetings. Simple questions get simple answers. "What's the capital of France?" → "Paris." A greeting is NOT an invitation to write 4000 words.
 **Emotional/Personal** → Lead with empathy, not information. Validate first. Then provide perspective that creates agency.
