@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="favicon.png" sizes="any">
+
+    <title>Imagine - Retrac</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <script src="js/retrac-api.js"></script>
+    <script src="js/settings-modal.js"></script>
+    <script src="js/auth-modal.js"></script>
+    <script src="js/search-chat.js"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #000; display: flex; height: 100vh; margin: 0; color: white; overflow: hidden; }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #555; }
+        .sidebar-collapsed { width: 54px !important; padding: 12px 8px !important; align-items: center !important; }
+        .sidebar-collapsed .sidebar-hide { display: none !important; }
+        .sidebar-collapsed .sidebar-header { justify-content: center !important; margin-bottom: 16px !important; }
+        .sidebar-collapsed .sidebar-header > *:not(.sidebar-logo) { display: none !important; }
+        .sidebar-collapsed nav a { justify-content: center; padding: 8px; }
+        .sidebar-collapsed nav a span { display: none; }
+        .sidebar-collapsed nav a svg { margin: 0; }
+        .sidebar-collapsed #sidebar-auth { align-items: center; }
+        .sidebar-collapsed #sidebar-auth button { display: none; }
+        .sidebar-collapsed #sidebar-auth > div { justify-content: center; }
+        .sidebar-collapsed #sidebar-auth > div > div.flex-1 { display: none; }
+        .sidebar-collapsed #sidebar-auth .go-pro-card { display: none; }
+        aside#sidebar { transition: width 0.2s ease; }
+        .masonry { columns: 4; column-gap: 4px; }
+        .masonry-item { break-inside: avoid; margin-bottom: 4px; cursor: pointer; position: relative; overflow: hidden; border-radius: 4px; }
+        .masonry-item img, .masonry-item video { width: 100%; display: block; transition: transform 0.3s ease; }
+        .masonry-item:hover img, .masonry-item:hover video { transform: scale(1.03); }
+        .cat-pill { white-space: nowrap; }
+        .cat-pill.active { background: #000 !important; color: white !important; }
+
+        /* Mode toggle pill */
+        .mode-toggle {
+            display: flex;
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 9999px;
+            padding: 3px;
+            gap: 2px;
+        }
+        .mode-toggle button {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 18px;
+            border-radius: 9999px;
+            font-size: 13px;
+            font-weight: 500;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            color: #888;
+            background: transparent;
+        }
+        .mode-toggle button.active {
+            background: #333;
+            color: white;
+        }
+        .mode-toggle button:hover:not(.active) {
+            color: #ccc;
+        }
+    </style>
+</head>
+<body class="antialiased">
+
+    <!-- Sidebar -->
+    <aside id="sidebar" class="w-[280px] h-full bg-[#171717] flex flex-col p-4 border-r border-[#2a2a2a] shrink-0">
+        <div class="sidebar-header flex items-center justify-between mb-8 px-1 mt-1">
+            <a href="index.html" class="sidebar-logo text-white hover:opacity-80 transition-opacity">
+                <img src="logo.png" width="32" height="32" alt="Retrac" class="w-8 h-8">
+            </a>
+            <div class="flex items-center gap-3 sidebar-hide">
+                <button class="text-[#a0a0a0] hover:text-white transition-colors"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><path d="M21 21l-4.3-4.3"></path></svg></button>
+                <button id="sidebar-toggle-btn" class="text-[#a0a0a0] bg-[#232323] border border-[#2e2e2e] p-1.5 rounded-lg hover:text-white hover:bg-[#252525] transition-colors"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="3" ry="3"></rect><line x1="15" y1="3" x2="15" y2="21"></line></svg></button>
+            </div>
+        </div>
+        <a href="index.html" class="sidebar-hide flex items-center justify-between w-full bg-[#232323] hover:bg-[#252525] border border-[#333333] rounded-full py-2.5 px-4 mb-6 transition-colors">
+            <div class="flex items-center gap-3"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="text-white"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg><span class="font-medium text-[15px] text-[#f0f0f0]">New Chat</span></div>
+            <span class="text-[13px] text-[#707070] font-mono tracking-wide">Ctrl O</span>
+        </a>
+        <nav class="flex flex-col gap-1.5 px-1">
+            <a href="apps.html" class="flex items-center gap-3.5 py-2 px-3 rounded-lg hover:bg-[#232323] transition-colors text-[#e0e0e0] hover:text-white"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="2"></rect><rect x="14" y="3" width="7" height="7" rx="2"></rect><rect x="14" y="14" width="7" height="7" rx="2"></rect><rect x="3" y="14" width="7" height="7" rx="2"></rect></svg><span class="text-[15px] font-medium">Apps</span></a>
+            <a href="imagine.html" class="flex items-center gap-3.5 py-2 px-3 rounded-lg bg-[#232323] text-white"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="6" width="15" height="13" rx="2"/><path d="M17 10l5-3v10l-5-3v-4z"/><circle cx="9.5" cy="12.5" r="2.5" stroke-width="1.5"/></svg><span class="text-[15px] font-medium">Imagine</span></a>
+            <a href="documents.html" class="flex items-center gap-3.5 py-2 px-3 rounded-lg hover:bg-[#232323] transition-colors text-[#e0e0e0] hover:text-white"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M 8 22 H 18 A 2 2 0 0 0 20 20 V 4 A 2 2 0 0 0 18 2 H 6 A 2 2 0 0 0 4 4 V 16 L 8 22 Z"></path><path d="M 4 16 H 6 A 2 2 0 0 1 8 18 V 22"></path><line x1="10" y1="10" x2="15" y2="10"></line><line x1="10" y1="14" x2="16" y2="14"></line></svg><span class="text-[15px] font-medium">Documents</span></a>
+            <a href="projects.html" class="flex items-center gap-3.5 py-2 px-3 rounded-lg hover:bg-[#232323] transition-colors text-[#e0e0e0] hover:text-white"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"></path><path d="M2 10h20"></path></svg><span class="text-[15px] font-medium">Projects</span></a>
+            <a href="#" id="search-chat-btn" class="flex items-center gap-3.5 py-2 px-3 rounded-lg hover:bg-[#232323] transition-colors text-[#e0e0e0] hover:text-white"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="8"></circle><path d="M21 21l-4.3-4.3"></path></svg><span class="text-[15px] font-medium">Search Chat</span></a>
+        </nav>
+        <div id="chat-history-container" class="sidebar-hide mt-6 px-1 flex-1 overflow-y-auto"></div>
+        <div id="sidebar-auth" class="mt-auto flex flex-col gap-3 pt-6 pb-2"></div>
+    </aside>
+
+    <!-- Main -->
+    <main class="flex-1 flex flex-col bg-[#252525] overflow-hidden relative">
+        <!-- Top bar with mode toggle -->
+        <div class="flex flex-col items-center px-6 pt-4 pb-2 shrink-0">
+            <!-- Image / Video toggle pill -->
+            <div class="mode-toggle mb-3">
+                <button id="mode-image" class="active" onclick="setMode('image')">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                    Image
+                </button>
+                <button id="mode-video" onclick="setMode('video')">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect><path d="M10 8l6 4-6 4V8z"></path></svg>
+                    Video
+                </button>
+            </div>
+            <!-- Inspiration / Your Creations tabs -->
+            <div class="flex items-center gap-6">
+                <button id="tab-inspiration" class="text-white text-[15px] font-semibold pb-1 border-b-2 border-white">Inspiration</button>
+                <button id="tab-creations" class="text-[#888] text-[15px] font-medium pb-1 border-b-2 border-transparent hover:text-white transition-colors">Your Creations</button>
+            </div>
+        </div>
+
+        <!-- Category pills -->
+        <div class="flex items-center gap-2 px-6 pb-3 overflow-x-auto shrink-0" id="cat-bar">
+            <button class="cat-pill active px-3.5 py-1.5 rounded-full text-[13px] font-medium bg-black text-white transition-colors" data-cat="all">All</button>
+            <button class="cat-pill px-3.5 py-1.5 rounded-full text-[13px] font-medium bg-[#2f2f2f] text-[#ccc] hover:bg-[#3a3a3a] transition-colors" data-cat="trending">Trending</button>
+            <button class="cat-pill px-3.5 py-1.5 rounded-full text-[13px] font-medium bg-[#2f2f2f] text-[#ccc] hover:bg-[#3a3a3a] transition-colors" data-cat="logo">Logo</button>
+            <button class="cat-pill px-3.5 py-1.5 rounded-full text-[13px] font-medium bg-[#2f2f2f] text-[#ccc] hover:bg-[#3a3a3a] transition-colors" data-cat="tattoo">Tattoo</button>
+            <button class="cat-pill px-3.5 py-1.5 rounded-full text-[13px] font-medium bg-[#2f2f2f] text-[#ccc] hover:bg-[#3a3a3a] transition-colors" data-cat="home">Home</button>
+            <button class="cat-pill px-3.5 py-1.5 rounded-full text-[13px] font-medium bg-[#2f2f2f] text-[#ccc] hover:bg-[#3a3a3a] transition-colors" data-cat="realistic">Realistic Photos</button>
+            <button class="cat-pill px-3.5 py-1.5 rounded-full text-[13px] font-medium bg-[#2f2f2f] text-[#ccc] hover:bg-[#3a3a3a] transition-colors" data-cat="futuristic">Futuristic</button>
+            <button class="cat-pill px-3.5 py-1.5 rounded-full text-[13px] font-medium bg-[#2f2f2f] text-[#ccc] hover:bg-[#3a3a3a] transition-colors" data-cat="character">Character Design</button>
+            <button class="cat-pill px-3.5 py-1.5 rounded-full text-[13px] font-medium bg-[#2f2f2f] text-[#ccc] hover:bg-[#3a3a3a] transition-colors" data-cat="product">Product</button>
+            <button class="cat-pill px-3.5 py-1.5 rounded-full text-[13px] font-medium bg-[#2f2f2f] text-[#ccc] hover:bg-[#3a3a3a] transition-colors" data-cat="cartoon">Cartoon</button>
+            <button class="cat-pill px-3.5 py-1.5 rounded-full text-[13px] font-medium bg-[#2f2f2f] text-[#ccc] hover:bg-[#3a3a3a] transition-colors" data-cat="aiart">AI Art</button>
+        </div>
+
+        <!-- Image Grid (Inspiration) -->
+        <div class="flex-1 overflow-y-auto px-2 pb-24" id="gallery-scroll">
+            <div class="masonry" id="gallery">
+                <!-- Images populated by JS -->
+            </div>
+        </div>
+
+        <!-- Your Creations (hidden by default) -->
+        <div id="creations-view" class="flex-1 overflow-y-auto pb-24" style="display:none;">
+            <div class="flex flex-col items-center justify-center h-full">
+                <p class="text-[#888] text-[15px]">No Creations Found</p>
+            </div>
+        </div>
+
+        <!-- Bottom Prompt Bar -->
+        <div class="absolute bottom-0 left-0 right-0 flex flex-col items-center pb-4 px-6" style="pointer-events:none;">
+            <div class="w-full max-w-2xl bg-[#2f2f2f] rounded-[2rem] p-3 pl-4 pr-3 shadow-2xl border border-[#3e3e3e] flex flex-col gap-2 relative" style="pointer-events:auto;">
+
+                <!-- Text Input -->
+                <textarea rows="2" id="img-prompt" class="w-full bg-transparent text-[#f3f4f6] text-[16px] outline-none placeholder-[#8e8e8e] resize-none mt-1" placeholder="Describe an image to generate..."></textarea>
+
+                <!-- Bottom Row: Controls -->
+                <div class="flex items-center justify-between mt-1">
+                    <!-- Left Controls -->
+                    <div class="flex items-center gap-1.5">
+                        <!-- Plus Button -->
+                        <input type="file" id="img-file-input" multiple class="hidden" />
+                        <button onclick="document.getElementById('img-file-input').click()" class="p-2 text-[#9ca3af] hover:text-white transition-colors rounded-full hover:bg-[#3f3f3f]">
+                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="12" y1="5" x2="12" y2="19"></line>
+                                <line x1="5" y1="12" x2="19" y2="12"></line>
+                            </svg>
+                        </button>
+
+                        <!-- Model Selector -->
+                        <div class="relative ml-1">
+                            <button id="img-model-btn" class="flex items-center gap-2 bg-[#212121] border border-[#3a3a3a] rounded-full px-3 py-1.5 hover:bg-[#2a2a2a] transition-colors">
+                                <span id="img-model-label" class="text-[#d1d5db] text-[14px] font-medium">Nano Banana</span>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2" class="ml-0.5"><polyline points="8 10 12 6 16 10"></polyline><polyline points="16 14 12 18 8 14"></polyline></svg>
+                            </button>
+                            <div id="img-model-dd" style="display:none; position:absolute; bottom:100%; left:0; margin-bottom:8px; width:190px; background:#2a2a2a; border:1px solid #3e3e3e; border-radius:12px; padding:4px; box-shadow:0 12px 40px rgba(0,0,0,0.6); z-index:60;">
+                                <!-- Image models (default) -->
+                                <button class="img-model-opt w-full text-left px-4 py-2.5 text-[14px] rounded-lg hover:bg-[#333] transition-colors text-white" data-model="Nano Banana">Nano Banana</button>
+                                <button class="img-model-opt w-full text-left px-4 py-2.5 text-[14px] rounded-lg hover:bg-[#333] transition-colors text-[#888]" data-model="Nano Banana Pro">Nano Banana Pro</button>
+                                <button class="img-model-opt w-full text-left px-4 py-2.5 text-[14px] rounded-lg hover:bg-[#333] transition-colors text-[#888]" data-model="Nano Banana 2">Nano Banana 2</button>
+                                <button class="img-model-opt w-full text-left px-4 py-2.5 text-[14px] rounded-lg hover:bg-[#333] transition-colors text-[#888]" data-model="Imagen 4">Imagen 4</button>
+                            </div>
+                        </div>
+
+                        <!-- Aspect Ratio Selector -->
+                        <div class="relative">
+                            <button id="img-ratio-btn" class="flex items-center gap-1.5 bg-[#212121] border border-[#3a3a3a] rounded-full px-3 py-1.5 hover:bg-[#2a2a2a] transition-colors">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"></rect></svg>
+                                <span id="img-ratio-label" class="text-[#d1d5db] text-[14px] font-medium">1:1</span>
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                            </button>
+                            <div id="img-ratio-dd" style="display:none; position:absolute; bottom:100%; left:0; margin-bottom:8px; width:190px; background:#2a2a2a; border:1px solid #3e3e3e; border-radius:12px; padding:4px; box-shadow:0 12px 40px rgba(0,0,0,0.6); z-index:60;">
+                                <!-- Image ratios (default) -->
+                                <button class="img-ratio-opt w-full flex items-center gap-3 px-4 py-2.5 text-[14px] rounded-lg hover:bg-[#333] transition-colors text-white" data-ratio="1:1"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"></rect></svg>Square 1:1</button>
+                                <button class="img-ratio-opt w-full flex items-center gap-3 px-4 py-2.5 text-[14px] rounded-lg hover:bg-[#333] transition-colors text-[#888]" data-ratio="4:3"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"></rect></svg>Landscape 4:3</button>
+                                <button class="img-ratio-opt w-full flex items-center gap-3 px-4 py-2.5 text-[14px] rounded-lg hover:bg-[#333] transition-colors text-[#888]" data-ratio="16:9"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="6" width="22" height="12" rx="2"></rect></svg>Landscape 16:9</button>
+                                <button class="img-ratio-opt w-full flex items-center gap-3 px-4 py-2.5 text-[14px] rounded-lg hover:bg-[#333] transition-colors text-[#888]" data-ratio="3:4"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"></rect></svg>Portrait 3:4</button>
+                            </div>
+                        </div>
+
+                        <!-- Style Selector (hidden in video mode) -->
+                        <div class="relative" id="style-selector-wrap">
+                            <button id="img-style-btn" class="flex items-center gap-1.5 bg-[#212121] border border-[#3a3a3a] rounded-full px-3 py-1.5 hover:bg-[#2a2a2a] transition-colors">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2"><circle cx="13.5" cy="6.5" r="2.5"></circle><circle cx="6" cy="12" r="2.5"></circle><circle cx="8" cy="21" r="2.5"></circle><circle cx="17.5" cy="15.5" r="2.5"></circle><path d="M21 12a9 9 0 1 1-9-9c4.97 0 9 2.69 9 6 0 2.21-1.79 4-4 4h-1.93a2 2 0 0 0-1.41 3.41l.07.07A2 2 0 0 1 13.5 20H12"></path></svg>
+                                <span id="img-style-label" class="text-[#d1d5db] text-[14px] font-medium">Style</span>
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                            </button>
+                            <div id="img-style-dd" style="display:none; position:absolute; bottom:100%; left:0; margin-bottom:8px; width:190px; max-height:360px; overflow-y:auto; background:#2a2a2a; border:1px solid #3e3e3e; border-radius:12px; padding:4px; box-shadow:0 12px 40px rgba(0,0,0,0.6); z-index:60;">
+                                <button class="img-style-opt w-full text-left px-4 py-2.5 text-[14px] rounded-lg hover:bg-[#333] transition-colors text-white" data-style="none">No Style</button>
+                                <button class="img-style-opt w-full text-left px-4 py-2.5 text-[14px] rounded-lg hover:bg-[#333] transition-colors text-[#888]" data-style="ghibli">Ghibli</button>
+                                <button class="img-style-opt w-full text-left px-4 py-2.5 text-[14px] rounded-lg hover:bg-[#333] transition-colors text-[#888]" data-style="photorealism">Photorealism</button>
+                                <button class="img-style-opt w-full text-left px-4 py-2.5 text-[14px] rounded-lg hover:bg-[#333] transition-colors text-[#888]" data-style="3dpixar">3D Pixar</button>
+                                <button class="img-style-opt w-full text-left px-4 py-2.5 text-[14px] rounded-lg hover:bg-[#333] transition-colors text-[#888]" data-style="cyberpunk">Cyberpunk</button>
+                                <button class="img-style-opt w-full text-left px-4 py-2.5 text-[14px] rounded-lg hover:bg-[#333] transition-colors text-[#888]" data-style="watercolor">Watercolor</button>
+                                <button class="img-style-opt w-full text-left px-4 py-2.5 text-[14px] rounded-lg hover:bg-[#333] transition-colors text-[#888]" data-style="surreal">Surreal</button>
+                                <button class="img-style-opt w-full text-left px-4 py-2.5 text-[14px] rounded-lg hover:bg-[#333] transition-colors text-[#888]" data-style="cartoon">Cartoon</button>
+                                <button class="img-style-opt w-full text-left px-4 py-2.5 text-[14px] rounded-lg hover:bg-[#333] transition-colors text-[#888]" data-style="vangogh">Van Gogh</button>
+                                <button class="img-style-opt w-full text-left px-4 py-2.5 text-[14px] rounded-lg hover:bg-[#333] transition-colors text-[#888]" data-style="pixel">Pixel Art Retro</button>
+                                <button class="img-style-opt w-full text-left px-4 py-2.5 text-[14px] rounded-lg hover:bg-[#333] transition-colors text-[#888]" data-style="funko">Funko Pop</button>
+                                <button class="img-style-opt w-full text-left px-4 py-2.5 text-[14px] rounded-lg hover:bg-[#333] transition-colors text-[#888]" data-style="graffiti">Graffiti</button>
+                            </div>
+                        </div>
+
+                        <!-- Duration Selector (video mode only, hidden by default) -->
+                        <div class="relative" id="duration-selector-wrap" style="display:none;">
+                            <button id="img-duration-btn" class="flex items-center gap-1.5 bg-[#212121] border border-[#3a3a3a] rounded-full px-3 py-1.5 hover:bg-[#2a2a2a] transition-colors">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                                <span id="img-duration-label" class="text-[#d1d5db] text-[14px] font-medium">8s</span>
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                            </button>
+                            <div id="img-duration-dd" style="display:none; position:absolute; bottom:100%; left:0; margin-bottom:8px; width:130px; background:#2a2a2a; border:1px solid #3e3e3e; border-radius:12px; padding:4px; box-shadow:0 12px 40px rgba(0,0,0,0.6); z-index:60;">
+                                <button class="img-duration-opt w-full text-left px-4 py-2.5 text-[14px] rounded-lg hover:bg-[#333] transition-colors text-[#888]" data-duration="5">5 seconds</button>
+                                <button class="img-duration-opt w-full text-left px-4 py-2.5 text-[14px] rounded-lg hover:bg-[#333] transition-colors text-white" data-duration="8">8 seconds</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right Controls -->
+                    <div class="flex items-center gap-2">
+                        <button class="p-2.5 mr-1 text-[#9ca3af] hover:text-white transition-colors rounded-full hover:bg-[#3f3f3f]">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
+                                <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                                <line x1="12" y1="19" x2="12" y2="22"></line>
+                            </svg>
+                        </button>
+                        <button id="generate-btn" class="w-[38px] h-[38px] bg-white rounded-full flex items-center justify-center hover:bg-gray-200 transition-colors mr-1 shadow-sm">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="12" y1="19" x2="12" y2="5"></line>
+                                <polyline points="5 12 12 5 19 12"></polyline>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Preview Modal -->
+    <div id="img-modal-backdrop" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.7); backdrop-filter:blur(6px); z-index:9998;" ></div>
+    <div id="img-modal" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); z-index:9999; width:520px; max-width:90vw;">
+        <div class="bg-[#2a2a2a] rounded-2xl overflow-hidden shadow-2xl border border-[#3e3e3e] relative">
+            <!-- Download button -->
+            <button id="modal-download" class="absolute top-3 right-3 w-8 h-8 bg-[#1a1a1a]/70 hover:bg-[#1a1a1a] rounded-full flex items-center justify-center text-white transition-colors z-10">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+            </button>
+            <div id="modal-media-container">
+                <img id="modal-img" src="" class="w-full" />
+            </div>
+            <div class="px-5 py-4">
+                <p id="modal-desc" class="text-[#ccc] text-[14px] leading-relaxed"></p>
+            </div>
+        </div>
+        <div class="flex items-center justify-center gap-3 mt-4">
+            <button id="modal-reuse-btn" class="flex items-center gap-2 px-5 py-2.5 bg-[#3a3a3a] hover:bg-[#444] text-white text-[14px] font-medium rounded-full transition-colors">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6"></path><path d="M21.34 15.57a10 10 0 1 1-.57-8.38"></path></svg>
+                Reuse Prompt
+            </button>
+            <button id="modal-edit-btn" class="flex items-center gap-2 px-5 py-2.5 bg-[#3a3a3a] hover:bg-[#444] text-white text-[14px] font-medium rounded-full transition-colors">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                Edit with Chat
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Auth provided by auth-modal.js
+
+        // ========== Current Mode ==========
+        let currentMode = 'image'; // 'image' or 'video'
+
+        function setMode(mode) {
+            currentMode = mode;
+            const imgBtn = document.getElementById('mode-image');
+            const vidBtn = document.getElementById('mode-video');
+            const prompt = document.getElementById('img-prompt');
+            const styleSelectorWrap = document.getElementById('style-selector-wrap');
+            const durationSelectorWrap = document.getElementById('duration-selector-wrap');
+            const modelDD = document.getElementById('img-model-dd');
+            const modelLabel = document.getElementById('img-model-label');
+            const ratioDD = document.getElementById('img-ratio-dd');
+            const ratioLabel = document.getElementById('img-ratio-label');
+
+            if (mode === 'image') {
+                imgBtn.classList.add('active');
+                vidBtn.classList.remove('active');
+                prompt.placeholder = 'Describe an image to generate...';
+                styleSelectorWrap.style.display = '';
+                durationSelectorWrap.style.display = 'none';
+
+                // Swap to image models
+                modelDD.innerHTML = `
+                    <button class="img-model-opt w-full text-left px-4 py-2.5 text-[14px] rounded-lg hover:bg-[#333] transition-colors text-white" data-model="Nano Banana">Nano Banana</button>
+                    <button class="img-model-opt w-full text-left px-4 py-2.5 text-[14px] rounded-lg hover:bg-[#333] transition-colors text-[#888]" data-model="Nano Banana Pro">Nano Banana Pro</button>
+                    <button class="img-model-opt w-full text-left px-4 py-2.5 text-[14px] rounded-lg hover:bg-[#333] transition-colors text-[#888]" data-model="Nano Banana 2">Nano Banana 2</button>
+                    <button class="img-model-opt w-full text-left px-4 py-2.5 text-[14px] rounded-lg hover:bg-[#333] transition-colors text-[#888]" data-model="Imagen 4">Imagen 4</button>
+                `;
+                modelLabel.textContent = 'Nano Banana';
+                rebindModelOpts();
+
+                // Swap to image aspect ratios
+                ratioDD.innerHTML = `
+                    <button class="img-ratio-opt w-full flex items-center gap-3 px-4 py-2.5 text-[14px] rounded-lg hover:bg-[#333] transition-colors text-white" data-ratio="1:1"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"></rect></svg>Square 1:1</button>
+                    <button class="img-ratio-opt w-full flex items-center gap-3 px-4 py-2.5 text-[14px] rounded-lg hover:bg-[#333] transition-colors text-[#888]" data-ratio="4:3"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"></rect></svg>Landscape 4:3</button>
+                    <button class="img-ratio-opt w-full flex items-center gap-3 px-4 py-2.5 text-[14px] rounded-lg hover:bg-[#333] transition-colors text-[#888]" data-ratio="16:9"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="6" width="22" height="12" rx="2"></rect></svg>Landscape 16:9</button>
+                    <button class="img-ratio-opt w-full flex items-center gap-3 px-4 py-2.5 text-[14px] rounded-lg hover:bg-[#333] transition-colors text-[#888]" data-ratio="3:4"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"></rect></svg>Portrait 3:4</button>
+                `;
+                ratioLabel.textContent = '1:1';
+                rebindRatioOpts();
+
+            } else {
+                vidBtn.classList.add('active');
+                imgBtn.classList.remove('active');
+                prompt.placeholder = 'Describe a video scene to generate...';
+                styleSelectorWrap.style.display = 'none';
+                durationSelectorWrap.style.display = '';
+
+                // Swap to video models
+                modelDD.innerHTML = `
+                    <button class="img-model-opt w-full text-left px-4 py-2.5 text-[14px] rounded-lg hover:bg-[#333] transition-colors text-white" data-model="Veo 2">Veo 2</button>
+                    <button class="img-model-opt w-full text-left px-4 py-2.5 text-[14px] rounded-lg hover:bg-[#333] transition-colors text-[#888]" data-model="Veo 3">Veo 3</button>
+                    <button class="img-model-opt w-full text-left px-4 py-2.5 text-[14px] rounded-lg hover:bg-[#333] transition-colors text-[#888]" data-model="Veo 3 Fast">Veo 3 Fast</button>
+                    <button class="img-model-opt w-full text-left px-4 py-2.5 text-[14px] rounded-lg hover:bg-[#333] transition-colors text-[#888]" data-model="Veo 3.1">Veo 3.1</button>
+                `;
+                modelLabel.textContent = 'Veo 2';
+                rebindModelOpts();
+
+                // Swap to video aspect ratios
+                ratioDD.innerHTML = `
+                    <button class="img-ratio-opt w-full flex items-center gap-3 px-4 py-2.5 text-[14px] rounded-lg hover:bg-[#333] transition-colors text-white" data-ratio="16:9"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="6" width="22" height="12" rx="2"></rect></svg>Landscape 16:9</button>
+                    <button class="img-ratio-opt w-full flex items-center gap-3 px-4 py-2.5 text-[14px] rounded-lg hover:bg-[#333] transition-colors text-[#888]" data-ratio="9:16"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="1" width="12" height="22" rx="2"></rect></svg>Portrait 9:16</button>
+                `;
+                ratioLabel.textContent = '16:9';
+                rebindRatioOpts();
+            }
+        }
+
+        function rebindModelOpts() {
+            document.querySelectorAll('.img-model-opt').forEach(opt => {
+                opt.addEventListener('click', () => {
+                    document.querySelectorAll('.img-model-opt').forEach(o => { o.classList.remove('text-white'); o.classList.add('text-[#888]'); });
+                    opt.classList.remove('text-[#888]'); opt.classList.add('text-white');
+                    document.getElementById('img-model-label').textContent = opt.dataset.model;
+                    document.getElementById('img-model-dd').style.display = 'none';
+                });
+            });
+        }
+
+        function rebindRatioOpts() {
+            document.querySelectorAll('.img-ratio-opt').forEach(opt => {
+                opt.addEventListener('click', () => {
+                    document.querySelectorAll('.img-ratio-opt').forEach(o => { o.classList.remove('text-white'); o.classList.add('text-[#888]'); });
+                    opt.classList.remove('text-[#888]'); opt.classList.add('text-white');
+                    document.getElementById('img-ratio-label').textContent = opt.dataset.ratio;
+                    document.getElementById('img-ratio-dd').style.display = 'none';
+                });
+            });
+        }
+
+        // ========== Sidebar Collapse ==========
+        const sidebarEl = document.getElementById('sidebar');
+        document.getElementById('sidebar-toggle-btn').addEventListener('click', () => { sidebarEl.classList.toggle('sidebar-collapsed'); });
+        sidebarEl.querySelector('.sidebar-logo')?.addEventListener('click', (e) => {
+            if (sidebarEl.classList.contains('sidebar-collapsed')) { e.preventDefault(); sidebarEl.classList.remove('sidebar-collapsed'); }
+        });
+
+        // ========== Gallery Images ==========
+        const galleryImages = [
+            { src: 'https://picsum.photos/seed/robot1/500/700', desc: 'Robot meditating under a glowing circuit tree with bioluminescent moss.' },
+            { src: 'https://picsum.photos/seed/shoes1/500/350', desc: 'Minimalist sneakers with seamless fabric design and glowing soles.' },
+            { src: 'https://picsum.photos/seed/sand1/500/500', desc: 'Surreal desert scene with melting hourglasses and a giant moon.' },
+            { src: 'https://picsum.photos/seed/cyber1/500/700', desc: 'Half-human half-cyborg portrait with circuit board patterns.' },
+            { src: 'https://picsum.photos/seed/tribal1/500/600', desc: 'Tribal warrior with neon feathers and ceremonial face paint.' },
+            { src: 'https://picsum.photos/seed/perfume1/500/500', desc: 'Crystal diamond perfume bottle with golden cap and ethereal smoke.' },
+            { src: 'https://picsum.photos/seed/watch1/500/500', desc: 'Macro photograph of intricate watch mechanism with golden gears.' },
+            { src: 'https://picsum.photos/seed/cat1/500/400', desc: 'Cute cat wearing oversized sunglasses in a retro style.' },
+            { src: 'https://picsum.photos/seed/space1/500/600', desc: 'Astronaut floating through a nebula of colorful cosmic dust.' },
+            { src: 'https://picsum.photos/seed/city1/500/350', desc: 'Futuristic neon cityscape reflected in rain-soaked streets.' },
+            { src: 'https://picsum.photos/seed/flower1/500/700', desc: 'Bioluminescent flowers growing in an enchanted crystal cave.' },
+            { src: 'https://picsum.photos/seed/car1/500/400', desc: 'Retro-futuristic flying car hovering above a sunset highway.' },
+            { src: 'https://picsum.photos/seed/dragon1/500/600', desc: 'Ice dragon perched on a frozen mountain peak at dawn.' },
+            { src: 'https://picsum.photos/seed/food1/500/500', desc: 'Levitating gourmet burger with ingredients frozen in mid-air.' },
+            { src: 'https://picsum.photos/seed/portrait1/500/650', desc: 'Ethereal portrait with flowing hair made of liquid gold.' },
+            { src: 'https://picsum.photos/seed/arch1/500/400', desc: 'Impossible architecture with staircases inspired by M.C. Escher.' },
+        ];
+
+        const gallery = document.getElementById('gallery');
+        function renderGallery() {
+            gallery.innerHTML = '';
+            galleryImages.forEach((img, i) => {
+                const div = document.createElement('div');
+                div.className = 'masonry-item';
+                div.innerHTML = `<img src="${img.src}" alt="${img.desc}" loading="lazy" />`;
+                div.addEventListener('click', () => openModal(i));
+                gallery.appendChild(div);
+            });
+        }
+        renderGallery();
+
+        // ========== Modal ==========
+        const modalBackdrop = document.getElementById('img-modal-backdrop');
+        const modal = document.getElementById('img-modal');
+        const modalMediaContainer = document.getElementById('modal-media-container');
+        const modalImg = document.getElementById('modal-img');
+        const modalDesc = document.getElementById('modal-desc');
+
+        function openModal(i) {
+            const img = galleryImages[i];
+            // Reset modal to image mode
+            modalMediaContainer.innerHTML = `<img id="modal-img" src="${img.src}" class="w-full" />`;
+            modalDesc.textContent = img.desc;
+            modalBackdrop.style.display = 'block';
+            modal.style.display = 'block';
+        }
+
+        function openCreationModal(creation) {
+            if (creation.type === 'video') {
+                modalMediaContainer.innerHTML = `<video src="${creation.url}" class="w-full" controls autoplay></video>`;
+            } else {
+                modalMediaContainer.innerHTML = `<img id="modal-img" src="${creation.url}" class="w-full" />`;
+            }
+            modalDesc.textContent = creation.revisedPrompt || creation.prompt;
+            modalBackdrop.style.display = 'block';
+            modal.style.display = 'block';
+        }
+
+        function closeModal() {
+            modalBackdrop.style.display = 'none';
+            modal.style.display = 'none';
+            // Stop any playing video
+            const vid = modalMediaContainer.querySelector('video');
+            if (vid) vid.pause();
+        }
+        modalBackdrop.addEventListener('click', closeModal);
+
+        // ========== Category pills ==========
+        document.querySelectorAll('.cat-pill').forEach(pill => {
+            pill.addEventListener('click', () => {
+                document.querySelectorAll('.cat-pill').forEach(p => {
+                    p.classList.remove('active', 'bg-black', 'text-white');
+                    p.classList.add('bg-[#2f2f2f]', 'text-[#ccc]');
+                });
+                pill.classList.add('active', 'bg-black', 'text-white');
+                pill.classList.remove('bg-[#2f2f2f]', 'text-[#ccc]');
+            });
+        });
+
+        // ========== Tabs ==========
+        const tabInsp = document.getElementById('tab-inspiration');
+        const tabCrea = document.getElementById('tab-creations');
+        const catBar = document.getElementById('cat-bar');
+        const galleryScroll = document.getElementById('gallery-scroll');
+        const creationsView = document.getElementById('creations-view');
+
+        tabInsp.addEventListener('click', () => {
+            tabInsp.classList.add('text-white', 'font-semibold', 'border-white');
+            tabInsp.classList.remove('text-[#888]', 'font-medium', 'border-transparent');
+            tabCrea.classList.remove('text-white', 'font-semibold', 'border-white');
+            tabCrea.classList.add('text-[#888]', 'font-medium', 'border-transparent');
+            catBar.style.display = '';
+            galleryScroll.style.display = '';
+            creationsView.style.display = 'none';
+        });
+        tabCrea.addEventListener('click', () => {
+            tabCrea.classList.add('text-white', 'font-semibold', 'border-white');
+            tabCrea.classList.remove('text-[#888]', 'font-medium', 'border-transparent');
+            tabInsp.classList.remove('text-white', 'font-semibold', 'border-white');
+            tabInsp.classList.add('text-[#888]', 'font-medium', 'border-transparent');
+            catBar.style.display = 'none';
+            galleryScroll.style.display = 'none';
+            creationsView.style.display = '';
+        });
+
+        // ========== Dropdowns ==========
+        const allDDs = [];
+        function setupDD(btnId, ddId, optClass, labelId, getLabelFn) {
+            const btn = document.getElementById(btnId);
+            const dd = document.getElementById(ddId);
+            if (!btn || !dd) return;
+            allDDs.push(dd);
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const open = dd.style.display !== 'none';
+                allDDs.forEach(d => d.style.display = 'none');
+                dd.style.display = open ? 'none' : 'block';
+            });
+            document.querySelectorAll('.' + optClass).forEach(opt => {
+                opt.addEventListener('click', () => {
+                    document.querySelectorAll('.' + optClass).forEach(o => { o.classList.remove('text-white'); o.classList.add('text-[#888]'); });
+                    opt.classList.remove('text-[#888]'); opt.classList.add('text-white');
+                    if (labelId) document.getElementById(labelId).textContent = getLabelFn(opt);
+                    dd.style.display = 'none';
+                });
+            });
+            dd.addEventListener('click', (e) => e.stopPropagation());
+        }
+
+        setupDD('img-model-btn', 'img-model-dd', 'img-model-opt', 'img-model-label', o => o.dataset.model);
+        setupDD('img-ratio-btn', 'img-ratio-dd', 'img-ratio-opt', 'img-ratio-label', o => o.dataset.ratio);
+        setupDD('img-style-btn', 'img-style-dd', 'img-style-opt', 'img-style-label', o => {
+            const s = o.dataset.style;
+            return s === 'none' ? 'Style' : o.textContent.trim();
+        });
+        setupDD('img-duration-btn', 'img-duration-dd', 'img-duration-opt', 'img-duration-label', o => o.dataset.duration + 's');
+
+        document.addEventListener('click', () => { allDDs.forEach(d => d.style.display = 'none'); });
+
+        // ========== Generation ==========
+        const imgPrompt = document.getElementById('img-prompt');
+        const generateBtn = document.getElementById('generate-btn');
+        let userCreations = JSON.parse(localStorage.getItem('retrac_creations') || '[]');
+
+        // Migrate old creations that don't have a type
+        userCreations = userCreations.map(c => {
+            if (!c.type) c.type = 'image';
+            return c;
+        });
+        localStorage.setItem('retrac_creations', JSON.stringify(userCreations));
+
+        async function generate() {
+            const prompt = imgPrompt.value.trim();
+            if (!prompt) return;
+
+            // Switch to creations tab
+            tabCrea.click();
+
+            if (currentMode === 'image') {
+                await generateImage(prompt);
+            } else {
+                await generateVideo(prompt);
+            }
+
+            imgPrompt.value = '';
+        }
+
+        async function generateImage(prompt) {
+            // Show loading state
+            const loadingEl = document.createElement('div');
+            loadingEl.className = 'flex flex-col items-center justify-center h-full gap-4';
+            loadingEl.innerHTML = `
+                <div class="w-8 h-8 border-2 border-[#555] border-t-white rounded-full animate-spin"></div>
+                <p class="text-[#888] text-[14px]">Generating your image...</p>
+                <p class="text-[#555] text-[12px] max-w-xs text-center">"${prompt.length > 60 ? prompt.slice(0, 60) + '...' : prompt}"</p>
+            `;
+            creationsView.innerHTML = '';
+            creationsView.appendChild(loadingEl);
+
+            try {
+                const style = document.getElementById('img-style-label').textContent;
+                const ratio = document.getElementById('img-ratio-label').textContent;
+                const selectedModel = document.getElementById('img-model-label').textContent;
+                let fullPrompt = prompt;
+                if (style && style !== 'Style' && style !== 'No Style') fullPrompt += `, ${style} style`;
+
+                const result = await RetracAPI.generateImage(fullPrompt, selectedModel, ratio);
+                if (result.error) {
+                    creationsView.innerHTML = `<div class="flex flex-col items-center justify-center h-full"><p class="text-red-400 text-[14px]">${result.error}</p></div>`;
+                    return;
+                }
+
+                const creation = { type: 'image', url: result.url, prompt, revisedPrompt: result.revised_prompt, createdAt: Date.now() };
+                userCreations.unshift(creation);
+                localStorage.setItem('retrac_creations', JSON.stringify(userCreations));
+                renderCreations();
+            } catch (err) {
+                creationsView.innerHTML = `<div class="flex flex-col items-center justify-center h-full"><p class="text-red-400 text-[14px]">${err.message}</p></div>`;
+            }
+        }
+
+        async function generateVideo(prompt) {
+            // Show loading state
+            const loadingEl = document.createElement('div');
+            loadingEl.className = 'flex flex-col items-center justify-center h-full gap-4';
+            loadingEl.innerHTML = `
+                <div class="w-8 h-8 border-2 border-[#555] border-t-white rounded-full animate-spin"></div>
+                <p class="text-[#888] text-[14px]">Generating video... This may take 1-3 minutes</p>
+                <p class="text-[#555] text-[12px] max-w-xs text-center">"${prompt.length > 60 ? prompt.slice(0, 60) + '...' : prompt}"</p>
+            `;
+            creationsView.innerHTML = '';
+            creationsView.appendChild(loadingEl);
+
+            try {
+                const ratio = document.getElementById('img-ratio-label').textContent;
+                const selectedModel = document.getElementById('img-model-label').textContent;
+                const duration = parseInt(document.getElementById('img-duration-label').textContent);
+
+                const result = await RetracAPI.generateVideo(prompt, selectedModel, ratio, duration);
+                if (result.error) {
+                    creationsView.innerHTML = `<div class="flex flex-col items-center justify-center h-full"><p class="text-red-400 text-[14px]">${result.error}</p></div>`;
+                    return;
+                }
+
+                const creation = { type: 'video', url: result.url, prompt, createdAt: Date.now() };
+                userCreations.unshift(creation);
+                localStorage.setItem('retrac_creations', JSON.stringify(userCreations));
+                renderCreations();
+            } catch (err) {
+                creationsView.innerHTML = `<div class="flex flex-col items-center justify-center h-full"><p class="text-red-400 text-[14px]">${err.message}</p></div>`;
+            }
+        }
+
+        function renderCreations() {
+            if (userCreations.length === 0) {
+                creationsView.innerHTML = '<div class="flex flex-col items-center justify-center h-full"><p class="text-[#888] text-[15px]">No Creations Found</p><p class="text-[#555] text-[13px] mt-2">Generate an image or video using the prompt bar below.</p></div>';
+                return;
+            }
+            creationsView.innerHTML = `<div class="masonry px-4 pt-4">${userCreations.map((c, i) => {
+                if (c.type === 'video') {
+                    return `<div class="masonry-item creation-item" data-idx="${i}">
+                        <video src="${c.url}" muted loop preload="metadata" onmouseenter="this.play()" onmouseleave="this.pause();this.currentTime=0;"></video>
+                        <div style="position:absolute;top:8px;left:8px;background:rgba(0,0,0,0.6);border-radius:6px;padding:2px 8px;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="white" stroke="none"><path d="M10 8l6 4-6 4V8z"/></svg>
+                        </div>
+                    </div>`;
+                } else {
+                    return `<div class="masonry-item creation-item" data-idx="${i}">
+                        <img src="${c.url}" alt="${c.prompt}" loading="lazy" />
+                    </div>`;
+                }
+            }).join('')}</div>`;
+
+            creationsView.querySelectorAll('.creation-item').forEach(el => {
+                el.addEventListener('click', () => {
+                    const idx = parseInt(el.dataset.idx);
+                    const c = userCreations[idx];
+                    openCreationModal(c);
+                });
+            });
+        }
+
+        generateBtn?.addEventListener('click', generate);
+        imgPrompt?.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); generate(); }
+        });
+
+        // Reuse Prompt button
+        document.getElementById('modal-reuse-btn')?.addEventListener('click', () => {
+            imgPrompt.value = modalDesc.textContent;
+            closeModal();
+            imgPrompt.focus();
+        });
+
+        // Edit with Chat button
+        document.getElementById('modal-edit-btn')?.addEventListener('click', () => {
+            const prompt = modalDesc.textContent;
+            closeModal();
+            window.location.href = 'index.html';
+        });
+
+        // Download button
+        document.getElementById('modal-download')?.addEventListener('click', () => {
+            const mediaEl = modalMediaContainer.querySelector('video') || modalMediaContainer.querySelector('img');
+            if (!mediaEl) return;
+            const a = document.createElement('a');
+            a.href = mediaEl.src;
+            a.download = mediaEl.tagName === 'VIDEO' ? 'retrac-video.mp4' : 'retrac-image.png';
+            a.target = '_blank';
+            a.click();
+        });
+
+        // Render existing creations
+        renderCreations();
+
+        // Settings
+        RetracSettingsModal.inject();
+
+        // ========== Auth ==========
+        const user = getCurrentUser();
+        if (user) {
+            const sa = document.getElementById('sidebar-auth');
+            const name = user.name || user.email.split('@')[0];
+            const av = user.picture
+                ? `<img src="${user.picture}" class="w-9 h-9 rounded-full object-cover shrink-0" referrerpolicy="no-referrer" />`
+                : `<div class="w-9 h-9 rounded-full bg-[#333] flex items-center justify-center text-white text-[14px] font-semibold shrink-0">${name[0].toUpperCase()}</div>`;
+            sa.innerHTML = `
+                <div class="bg-[#2D8CFF] rounded-2xl p-4 flex items-center justify-between mb-3 cursor-pointer hover:brightness-110 transition go-pro-card">
+                    <div class="flex items-center gap-3">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="white" stroke="none"><path d="M12 2L15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2z"></path></svg>
+                        <div><p class="text-white text-[13px] font-semibold">Go Pro</p><p class="text-white/70 text-[10px]">Upgrade your plan</p></div>
+                    </div>
+                    <span class="bg-white text-black text-[11px] font-semibold px-3 py-1 rounded-full">Upgrade</span>
+                </div>
+                <div class="flex items-center gap-3 px-1 py-1 cursor-pointer hover:bg-[#232323] rounded-lg transition-colors" onclick="logoutUser()">
+                    ${av}
+                    <div class="flex-1 min-w-0"><p class="text-white text-[13px] font-medium truncate">${name}</p><p class="text-[#666] text-[10px]">Free</p></div>
+                </div>`;
+        }
+
+        // Search Chat
+        RetracSearchChat.inject();
+        document.getElementById('search-chat-btn')?.addEventListener('click', (e) => {
+            e.preventDefault();
+            RetracSearchChat.open();
+        });
+    </script>
+</body>
+</html>

@@ -90,6 +90,16 @@ const RetracAPI = {
             body: JSON.stringify({ prompt, model, aspectRatio })
         });
         return res.json();
+    },
+
+    // Generate video
+    async generateVideo(prompt, model, aspectRatio, duration) {
+        const res = await fetch(this.baseUrl + '/api/generate-video', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prompt, model, aspectRatio, duration })
+        });
+        return res.json();
     }
 };
 
