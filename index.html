@@ -12,6 +12,7 @@
     <script src="js/retrac-api.js"></script>
     <script src="js/chat-ui.js"></script>
     <script src="js/settings-modal.js"></script>
+    <script src="js/auth-modal.js"></script>
     <script src="js/search-chat.js"></script>
     <style>
         body {
@@ -166,16 +167,10 @@
 
         <!-- Navigation -->
         <nav class="flex flex-col gap-1.5 px-1">
-            <div class="flex items-center gap-3.5 py-2 px-3 rounded-lg text-[#555] cursor-default">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                    <rect x="3" y="3" width="7" height="7" rx="2"></rect>
-                    <rect x="14" y="3" width="7" height="7" rx="2"></rect>
-                    <rect x="14" y="14" width="7" height="7" rx="2"></rect>
-                    <rect x="3" y="14" width="7" height="7" rx="2"></rect>
-                </svg>
+            <a href="apps.html" class="flex items-center gap-3.5 py-2 px-3 rounded-lg hover:bg-[#232323] transition-colors text-[#e0e0e0] hover:text-white">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="2"></rect><rect x="14" y="3" width="7" height="7" rx="2"></rect><rect x="14" y="14" width="7" height="7" rx="2"></rect><rect x="3" y="14" width="7" height="7" rx="2"></rect></svg>
                 <span class="text-[15px] font-medium">Apps</span>
-                <span class="text-[11px] text-[#555] bg-[#2a2a2a] px-2 py-0.5 rounded-full ml-auto">Soon</span>
-            </div>
+            </a>
             
             <a href="images.html" class="flex items-center gap-3.5 py-2 px-3 rounded-lg hover:bg-[#232323] transition-colors group text-[#e0e0e0] hover:text-white">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -405,7 +400,8 @@
                             <div id="model-dropdown" class="dropdown-hidden absolute bottom-full left-0 mb-2 w-[300px] bg-[#2a2a2a] border border-[#3e3e3e] rounded-2xl shadow-2xl overflow-hidden z-50">
                                 <!-- Search -->
                                 <div class="p-3 border-b border-[#3e3e3e]">
-                                    <input type="text" id="model-search" placeholder="Search models..." class="w-full bg-transparent text-white text-[15px] outline-none placeholder-[#6b6b6b]" />
+                                    <div id="model-search" contenteditable="true" class="w-full bg-transparent text-white text-[15px] outline-none" style="min-height:24px;cursor:text;" data-placeholder="Search models..."></div>
+                                    <style>#model-search:empty::before{content:attr(data-placeholder);color:#6b6b6b;pointer-events:none;}#model-search:focus{outline:none;}#model-search br{display:none;}</style>
                                 </div>
 
                                 <!-- Optional Section -->
@@ -580,13 +576,8 @@
                 <span class="text-white text-[14px] font-medium">Create New Chat</span>
             </button>
 
-            <!-- Chat History -->
-            <p style="padding:16px 12px 8px; font-size:12px; color:#666; font-weight:600;">Today</p>
-            <div id="search-chat-list">
-                <button class="search-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-[#252525] transition-colors text-left">
-                    <span class="text-white text-[14px]">General Chat</span>
-                </button>
-            </div>
+            <!-- Chat History (dynamically rendered) -->
+            <div id="search-chat-list"></div>
         </div>
     </div>
 
@@ -934,41 +925,7 @@
     </div>
 
     <script>
-        // ========== LOCAL AUTH (localStorage) ==========
-        function getUsers() {
-            return JSON.parse(localStorage.getItem('retrac_users') || '{}');
-        }
-        function saveUsers(users) {
-            localStorage.setItem('retrac_users', JSON.stringify(users));
-        }
-        function getCurrentUser() {
-            return JSON.parse(localStorage.getItem('retrac_current_user') || 'null');
-        }
-        function setCurrentUser(user) {
-            localStorage.setItem('retrac_current_user', JSON.stringify(user));
-        }
-        function logoutUser() {
-            localStorage.removeItem('retrac_current_user');
-            location.reload();
-        }
-        function checkEmailExists(email) {
-            return !!getUsers()[email];
-        }
-        function registerUser(email, password) {
-            const users = getUsers();
-            if (users[email]) return { error: 'Account already exists.' };
-            users[email] = { email, password, createdAt: Date.now() };
-            saveUsers(users);
-            setCurrentUser({ email });
-            return { error: null };
-        }
-        function loginUser(email, password) {
-            const users = getUsers();
-            if (!users[email]) return { error: 'No account found with this email.' };
-            if (users[email].password !== password) return { error: 'Wrong password. Please try again.' };
-            setCurrentUser({ email });
-            return { error: null };
-        }
+        // Auth provided by auth-modal.js (getCurrentUser, logoutUser, etc. are global)
 
         // ========== Chat Storage ==========
         function getChats() {
@@ -1240,8 +1197,30 @@
         const searchPopup = document.getElementById('search-popup');
         const searchInput = document.getElementById('search-input');
 
+        function renderSearchChatList() {
+            const list = document.getElementById('search-chat-list');
+            if (!list) return;
+            const chats = RetracChatHistory.getAll();
+            if (chats.length === 0) {
+                list.innerHTML = '<p style="padding:16px 12px 8px; font-size:12px; color:#666;">No chats yet</p>';
+                return;
+            }
+            const now = Date.now(), dayMs = 86400000;
+            const today = chats.filter(c => now - (c.updatedAt || c.createdAt) < dayMs);
+            const yesterday = chats.filter(c => { const age = now - (c.updatedAt || c.createdAt); return age >= dayMs && age < dayMs * 2; });
+            const older = chats.filter(c => now - (c.updatedAt || c.createdAt) >= dayMs * 2);
+            const escapeHtml = (t) => { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; };
+            const chatLink = (c) => `<a href="index.html?chat=${c.id}" class="search-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-[#252525] transition-colors text-left" style="display:flex; text-decoration:none;"><span class="text-white text-[14px]">${escapeHtml(c.title || 'New Chat')}</span></a>`;
+            let html = '';
+            if (today.length) { html += '<p style="padding:16px 12px 8px; font-size:12px; color:#666; font-weight:600;">Today</p>' + today.map(chatLink).join(''); }
+            if (yesterday.length) { html += '<p style="padding:16px 12px 8px; font-size:12px; color:#666; font-weight:600;">Yesterday</p>' + yesterday.map(chatLink).join(''); }
+            if (older.length) { html += '<p style="padding:16px 12px 8px; font-size:12px; color:#666; font-weight:600;">Previous</p>' + older.slice(0, 20).map(chatLink).join(''); }
+            list.innerHTML = html;
+        }
+
         document.getElementById('search-chat-btn').addEventListener('click', (e) => {
             e.preventDefault();
+            renderSearchChatList();
             searchBackdrop.style.display = 'block';
             searchPopup.style.display = 'flex';
             searchInput.value = '';
@@ -1484,13 +1463,23 @@
         // Mark initial checkmark
         document.querySelector('.model-option[data-model="Gemini 3 Pro"] svg.ml-auto')?.classList.add('checkmark-icon');
 
-        // Model search filter
+        // Model search filter — contenteditable div
         modelSearch.addEventListener('input', () => {
-            const query = modelSearch.value.toLowerCase();
+            const query = (modelSearch.textContent || '').toLowerCase();
             document.querySelectorAll('.model-option').forEach(btn => {
                 const name = btn.dataset.model.toLowerCase();
                 btn.style.display = name.includes(query) ? '' : 'none';
             });
+        });
+        // Prevent Enter from adding line breaks
+        modelSearch.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') e.preventDefault();
+        });
+        // Paste as plain text only
+        modelSearch.addEventListener('paste', (e) => {
+            e.preventDefault();
+            const text = (e.clipboardData || window.clipboardData).getData('text/plain');
+            document.execCommand('insertText', false, text);
         });
 
         // Toggle switches (animated)
@@ -1807,6 +1796,30 @@
             showChatView: showChatViewFn,
             onChatCreated: (chat) => {
                 RetracChatUI.updateSidebarHistory();
+            },
+            onModelRestored: (model) => {
+                // Update model selector button to match the chat's model
+                if (modelLabel) modelLabel.textContent = model;
+                if (modelIcon && modelIcons[model]) modelIcon.innerHTML = modelIcons[model];
+                // Update dropdown active state
+                document.querySelectorAll('.model-option').forEach(b => {
+                    b.classList.remove('bg-[#1a3a5c]');
+                    b.classList.add('hover:bg-[#353535]');
+                    const check = b.querySelector('.checkmark-icon');
+                    if (check) check.remove();
+                });
+                const activeBtn = document.querySelector(`.model-option[data-model="${model}"]`);
+                if (activeBtn) {
+                    activeBtn.classList.add('bg-[#1a3a5c]');
+                    activeBtn.classList.remove('hover:bg-[#353535]');
+                    const checkSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                    checkSvg.setAttribute('width', '18'); checkSvg.setAttribute('height', '18');
+                    checkSvg.setAttribute('viewBox', '0 0 24 24'); checkSvg.setAttribute('fill', 'none');
+                    checkSvg.setAttribute('stroke', 'white'); checkSvg.setAttribute('stroke-width', '2.5');
+                    checkSvg.classList.add('ml-auto', 'checkmark-icon');
+                    checkSvg.innerHTML = '<polyline points="20 6 9 17 4 12"></polyline>';
+                    activeBtn.appendChild(checkSvg);
+                }
             }
         });
 
@@ -1901,18 +1914,20 @@
         let searchWebEnabled = false;
         let deepResearchEnabled = false;
 
-        document.querySelector('#ellipsis-dropdown button:nth-child(2)')?.addEventListener('click', () => {
+        const ellipsisButtons = document.querySelectorAll('#ellipsis-dropdown > button');
+        // Button 0 = Search Web, Button 1 = Deep Research, Button 2 = Canva
+        ellipsisButtons[0]?.addEventListener('click', (e) => {
+            e.stopPropagation();
             searchWebEnabled = !searchWebEnabled;
             RetracSettings.set('searchWeb', searchWebEnabled);
-            const btn = document.querySelector('#ellipsis-dropdown button:nth-child(2)');
-            if (btn) btn.style.background = searchWebEnabled ? '#1a3a5c' : '';
+            ellipsisButtons[0].style.background = searchWebEnabled ? '#1a3a5c' : '';
         });
 
-        document.querySelector('#ellipsis-dropdown button:nth-child(3)')?.addEventListener('click', () => {
+        ellipsisButtons[1]?.addEventListener('click', (e) => {
+            e.stopPropagation();
             deepResearchEnabled = !deepResearchEnabled;
             RetracSettings.set('deepResearch', deepResearchEnabled);
-            const btn = document.querySelector('#ellipsis-dropdown button:nth-child(3)');
-            if (btn) btn.style.background = deepResearchEnabled ? '#1a3a5c' : '';
+            ellipsisButtons[1].style.background = deepResearchEnabled ? '#1a3a5c' : '';
         });
 
         // Ctrl+O shortcut for new chat
@@ -1938,32 +1953,7 @@
             }
         });
 
-        // Auth guard on interactive elements (not logged in → show login)
-        document.getElementById('mic-btn')?.addEventListener('click', (e) => {
-            if (!getCurrentUser()) { e.stopImmediatePropagation(); requireAuth(); }
-        }, true);
-
-        document.querySelector('#file-input')?.closest('button')?.addEventListener('click', (e) => {
-            if (!getCurrentUser()) { e.preventDefault(); e.stopImmediatePropagation(); requireAuth(); }
-        }, true);
-
-        // Guard textarea — show login on focus if not logged in
-        chatInput.addEventListener('focus', () => {
-            if (!getCurrentUser()) {
-                chatInput.blur();
-                requireAuth();
-            }
-        });
-
-        // Guard sidebar nav links (except actual page navigation)
-        document.querySelectorAll('#sidebar nav a[href="#"]').forEach(link => {
-            link.addEventListener('click', (e) => {
-                if (!getCurrentUser() && !link.id) {
-                    e.preventDefault();
-                    requireAuth();
-                }
-            });
-        });
+        // Auth guards handled globally by auth-modal.js
     </script>
 </body>
 </html>

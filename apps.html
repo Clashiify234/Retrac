@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="favicon.png" sizes="any">
+    <title>Apps - Retrac AI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <script src="js/retrac-api.js"></script>
+    <script src="js/settings-modal.js"></script>
+    <script src="js/auth-modal.js"></script>
+    <script src="js/search-chat.js"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #000000; display: flex; height: 100vh; overflow: hidden; margin: 0; }
+        .sidebar-collapsed { width: 68px !important; }
+        .sidebar-collapsed .sidebar-hide { display: none !important; }
+        .sidebar-collapsed .sidebar-header { justify-content: center; }
+        .sidebar-collapsed #sidebar-auth { align-items: center; }
+        .sidebar-collapsed #sidebar-auth button { display: none; }
+        .sidebar-collapsed #sidebar-auth > div { justify-content: center; }
+        .sidebar-collapsed #sidebar-auth > div > div.flex-1 { display: none; }
+        .sidebar-collapsed #sidebar-auth .go-pro-card { display: none; }
+        .app-card {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            width: 120px; height: 120px; border-radius: 16px; border: 1px solid #2a2a2a;
+            background: #1a1a1a; cursor: pointer; transition: all 0.2s ease;
+            gap: 10px; text-decoration: none;
+        }
+        .app-card:hover { border-color: #444; background: #222; transform: translateY(-2px); }
+        .app-card img { width: 40px; height: 40px; border-radius: 10px; object-fit: contain; }
+        .app-card span { color: #ccc; font-size: 12px; font-weight: 500; text-align: center; line-height: 1.3; }
+    </style>
+</head>
+<body class="antialiased">
+
+    <!-- Sidebar -->
+    <aside id="sidebar" class="w-[280px] h-full bg-[#171717] flex flex-col p-4 border-r border-[#2a2a2a] shrink-0">
+        <div class="sidebar-header flex items-center justify-between mb-8 px-1 mt-1">
+            <a href="index.html" class="sidebar-logo text-white hover:opacity-80 transition-opacity">
+                <img src="logo.png" width="32" height="32" alt="Retrac" class="w-8 h-8">
+            </a>
+            <div class="flex items-center gap-3 sidebar-hide">
+                <button class="text-[#a0a0a0] hover:text-white transition-colors"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><path d="M21 21l-4.3-4.3"></path></svg></button>
+                <button id="sidebar-toggle-btn" class="text-[#a0a0a0] bg-[#232323] border border-[#2e2e2e] p-1.5 rounded-lg hover:text-white hover:bg-[#252525] transition-colors"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="3" ry="3"></rect><line x1="15" y1="3" x2="15" y2="21"></line></svg></button>
+            </div>
+        </div>
+        <a href="index.html" class="sidebar-hide flex items-center justify-between w-full bg-[#232323] hover:bg-[#252525] border border-[#333333] rounded-full py-2.5 px-4 mb-6 transition-colors">
+            <div class="flex items-center gap-3"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="text-white"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg><span class="font-medium text-[15px] text-[#f0f0f0]">New Chat</span></div>
+            <span class="text-[13px] text-[#707070] font-mono tracking-wide">Ctrl O</span>
+        </a>
+        <nav class="flex flex-col gap-1.5 px-1">
+            <a href="apps.html" class="flex items-center gap-3.5 py-2 px-3 rounded-lg bg-[#232323] text-white"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="2"></rect><rect x="14" y="3" width="7" height="7" rx="2"></rect><rect x="14" y="14" width="7" height="7" rx="2"></rect><rect x="3" y="14" width="7" height="7" rx="2"></rect></svg><span class="text-[15px] font-medium">Apps</span></a>
+            <a href="images.html" class="flex items-center gap-3.5 py-2 px-3 rounded-lg hover:bg-[#232323] transition-colors text-[#e0e0e0] hover:text-white"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg><span class="text-[15px] font-medium">Images</span></a>
+            <a href="documents.html" class="flex items-center gap-3.5 py-2 px-3 rounded-lg hover:bg-[#232323] transition-colors text-[#e0e0e0] hover:text-white"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M 8 22 H 18 A 2 2 0 0 0 20 20 V 4 A 2 2 0 0 0 18 2 H 6 A 2 2 0 0 0 4 4 V 16 L 8 22 Z"></path><path d="M 4 16 H 6 A 2 2 0 0 1 8 18 V 22"></path><line x1="10" y1="10" x2="15" y2="10"></line><line x1="10" y1="14" x2="16" y2="14"></line></svg><span class="text-[15px] font-medium">Documents</span></a>
+            <a href="projects.html" class="flex items-center gap-3.5 py-2 px-3 rounded-lg hover:bg-[#232323] transition-colors text-[#e0e0e0] hover:text-white"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"></path><path d="M2 10h20"></path></svg><span class="text-[15px] font-medium">Projects</span></a>
+            <a href="#" id="search-chat-btn" class="flex items-center gap-3.5 py-2 px-3 rounded-lg hover:bg-[#232323] transition-colors text-[#e0e0e0] hover:text-white"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="8"></circle><path d="M21 21l-4.3-4.3"></path></svg><span class="text-[15px] font-medium">Search Chat</span></a>
+        </nav>
+        <div id="chat-history-container" class="sidebar-hide mt-6 px-1 flex-1 overflow-y-auto"></div>
+        <div id="sidebar-auth" class="mt-auto flex flex-col gap-3 pt-6 pb-2"></div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 flex flex-col bg-[#1a1a1a] overflow-y-auto">
+        <!-- Apps Overview -->
+        <div id="apps-overview" class="max-w-[800px] w-full mx-auto px-8 py-12">
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="text-white text-[18px] font-semibold">Recently Used</h2>
+                <button class="flex items-center gap-2 bg-[#2a2a2a] border border-[#333] text-[#ccc] text-[13px] font-medium px-4 py-2 rounded-full hover:bg-[#333] hover:text-white transition-colors">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                    Explore More Apps
+                </button>
+            </div>
+            <div class="flex flex-wrap gap-4">
+                <button id="open-linkedin-app" class="app-card">
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/c/ca/LinkedIn_logo_initials.png" alt="LinkedIn" />
+                    <span>LinkedIn</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- LinkedIn Workflow Builder (Dark Mode) -->
+        <div id="linkedin-workflow" class="hidden w-full h-full relative" style="background:#111;background-image:radial-gradient(circle,#222 1px,transparent 1px);background-size:24px 24px;">
+
+            <style>
+                @keyframes wfPulse { 0%,100%{box-shadow:0 0 0 0 rgba(34,197,94,0.4)} 50%{box-shadow:0 0 0 12px rgba(34,197,94,0)} }
+                @keyframes wfGlow { 0%{border-color:#2a2a2a} 50%{border-color:#22c55e;box-shadow:0 0 20px rgba(34,197,94,0.3)} 100%{border-color:#2a2a2a} }
+                @keyframes wfFlowDown { 0%{background-position:0 0} 100%{background-position:0 40px} }
+                @keyframes wfNodeIn { 0%{opacity:0;transform:translateY(20px) scale(0.95)} 100%{opacity:1;transform:translateY(0) scale(1)} }
+                @keyframes wfSuccessPop { 0%{transform:scale(1)} 30%{transform:scale(1.05)} 100%{transform:scale(1)} }
+                .wf-connector { width:2px;height:40px;background:linear-gradient(180deg,#333 50%,transparent 50%);background-size:2px 8px; }
+                .wf-connector.running { animation:wfFlowDown 0.6s linear infinite;background:linear-gradient(180deg,#22c55e 50%,transparent 50%);background-size:2px 8px; }
+                .wf-dot { width:12px;height:12px;border-radius:50%;background:#333;border:2px solid #444;margin:-2px 0;transition:all 0.3s; }
+                .wf-dot.running { background:#22c55e;border-color:#22c55e;animation:wfPulse 1s ease-in-out infinite; }
+                .wf-dot.done { background:#22c55e;border-color:#4ade80; }
+                .wf-node { transition:all 0.4s cubic-bezier(0.4,0,0.2,1); }
+                .wf-node.running { animation:wfGlow 1.5s ease-in-out; }
+                .wf-node.done { animation:wfSuccessPop 0.4s ease; }
+            </style>
+
+            <!-- Top Bar -->
+            <div style="position:absolute;top:0;left:0;right:0;height:56px;background:#1a1a1a;border-bottom:1px solid #2a2a2a;display:flex;align-items:center;padding:0 20px;z-index:10;">
+                <button id="back-to-apps" style="display:flex;align-items:center;gap:8px;background:none;border:none;cursor:pointer;color:#888;font-size:14px;font-weight:500;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5"></path><path d="M12 19l-7-7 7-7"></path></svg>
+                    Back
+                </button>
+                <div style="flex:1;display:flex;align-items:center;justify-content:center;gap:10px;">
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/c/ca/LinkedIn_logo_initials.png" width="24" height="24" style="border-radius:4px;" />
+                    <span style="font-weight:600;font-size:15px;color:white;">LinkedIn Auto Post</span>
+                </div>
+                <div style="display:flex;gap:8px;">
+                    <button id="run-workflow-btn" style="background:#22c55e;color:white;border:none;border-radius:10px;padding:8px 22px;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;transition:all 0.2s;">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="white" stroke="none"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                        Run
+                    </button>
+                    <button style="background:#2a2a2a;color:#ccc;border:1px solid #333;border-radius:10px;padding:8px 18px;font-size:13px;font-weight:500;cursor:pointer;">Save</button>
+                </div>
+            </div>
+
+            <!-- Workflow Canvas -->
+            <div id="wf-canvas" style="position:absolute;top:56px;left:0;right:0;bottom:0;overflow:auto;padding:40px 20px 100px;">
+
+                <!-- TRIGGER NODE (centered) -->
+                <div style="display:flex;flex-direction:column;align-items:center;">
+                    <div class="wf-node" style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:16px;width:400px;box-shadow:0 4px 20px rgba(0,0,0,0.3);overflow:hidden;">
+                        <div style="background:rgba(34,197,94,0.08);padding:14px 18px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #2a2a2a;">
+                            <div style="display:flex;align-items:center;gap:10px;">
+                                <div style="background:#22c55e;border-radius:8px;width:30px;height:30px;display:flex;align-items:center;justify-content:center;">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="white" stroke="none"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                                </div>
+                                <span style="font-weight:600;font-size:14px;color:white;">Trigger</span>
+                            </div>
+                            <button style="background:none;border:none;cursor:pointer;color:#555;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg></button>
+                        </div>
+                        <div style="padding:18px;">
+                            <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2"><path d="M23 4v6h-6"></path><path d="M1 20v-6h6"></path><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                                <span style="font-weight:500;font-size:13px;color:white;">Schedule</span>
+                                <span style="background:#2a2a2a;color:#888;font-size:10px;padding:2px 8px;border-radius:4px;font-weight:600;letter-spacing:0.5px;">DATA</span>
+                            </div>
+                            <p style="color:#666;font-size:13px;margin-bottom:14px;">Post automatically on schedule</p>
+                            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+                                <span style="color:#777;font-size:12px;">Frequency:</span>
+                                <select style="background:#0e0e0e;border:1px solid #333;border-radius:8px;padding:5px 12px;font-size:12px;color:white;cursor:pointer;">
+                                    <option>Daily</option><option>Weekly</option><option selected>Every 3 days</option><option>Custom</option>
+                                </select>
+                            </div>
+                            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+                                <span style="color:#777;font-size:12px;">Time:</span>
+                                <input type="time" value="09:00" style="background:#0e0e0e;border:1px solid #333;border-radius:8px;padding:5px 12px;font-size:12px;color:white;" />
+                            </div>
+                            <div style="display:flex;align-items:center;justify-content:space-between;">
+                                <span style="color:#777;font-size:12px;">Processing limit:</span>
+                                <span style="background:#2a2a2a;color:#aaa;font-size:11px;padding:3px 12px;border-radius:6px;font-weight:500;">Unlimited</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Vertical connector from trigger -->
+                    <div class="wf-connector"></div>
+                    <div class="wf-dot"></div>
+                </div>
+
+                <!-- Branch split: SVG lines going left and right -->
+                <div style="position:relative;width:100%;display:flex;justify-content:center;">
+                    <svg width="700" height="80" style="display:block;margin:0 auto;">
+                        <path d="M350 0 C350 40, 130 40, 130 80" stroke="#333" stroke-width="2" fill="none" class="wf-branch-line"/>
+                        <path d="M350 0 C350 40, 570 40, 570 80" stroke="#333" stroke-width="2" fill="none" class="wf-branch-line"/>
+                    </svg>
+                </div>
+
+                <!-- Two cards side by side with big gap -->
+                <div style="display:flex;justify-content:center;gap:140px;padding:0 20px;">
+
+                    <!-- LEFT: AI AGENT NODE -->
+                    <div style="display:flex;flex-direction:column;align-items:center;">
+                        <div class="wf-dot"></div>
+                        <div class="wf-connector"></div>
+                        <div class="wf-node" style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:16px;width:380px;box-shadow:0 4px 20px rgba(0,0,0,0.3);overflow:hidden;">
+                            <div style="background:rgba(99,102,241,0.08);padding:14px 18px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #2a2a2a;">
+                                <div style="display:flex;align-items:center;gap:10px;">
+                                    <div style="background:#6366f1;border-radius:8px;width:30px;height:30px;display:flex;align-items:center;justify-content:center;">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="white" stroke="none"><path d="M12 2a7 7 0 0 1 7 7c0 2.38-1.19 4.47-3 5.74V17a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 0 1 7-7z"></path><rect x="9" y="21" width="6" height="1" rx="0.5"></rect></svg>
+                                    </div>
+                                    <span style="font-weight:600;font-size:14px;color:white;">AI Agent</span>
+                                    <span style="color:#6366f1;font-size:12px;font-weight:500;">Retrac</span>
+                                </div>
+                                <button style="background:none;border:none;cursor:pointer;color:#555;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg></button>
+                            </div>
+                            <div style="padding:18px;">
+                                <p style="color:#666;font-size:12px;margin-bottom:8px;">System message</p>
+                                <textarea style="width:100%;background:#0e0e0e;border:1px solid #333;border-radius:10px;padding:12px;font-size:13px;color:#ccc;resize:vertical;min-height:65px;font-family:inherit;box-sizing:border-box;">Write a professional, engaging LinkedIn post about AI trends. Keep it under 300 words. Include relevant hashtags.</textarea>
+                                <div style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;">
+                                    <span style="color:#777;font-size:12px;">Temperature</span>
+                                    <div style="display:flex;align-items:center;gap:8px;">
+                                        <input type="range" min="0" max="10" value="7" style="width:100px;accent-color:#6366f1;" />
+                                        <span style="color:#aaa;font-size:12px;font-weight:500;">0.7</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="wf-connector"></div>
+                        <button id="add-node-btn" style="width:40px;height:40px;border-radius:50%;border:2px dashed #333;background:#1a1a1a;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#555;transition:all 0.3s;">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                        </button>
+                    </div>
+
+                    <!-- RIGHT: ACTION NODE -->
+                    <div style="display:flex;flex-direction:column;align-items:center;">
+                        <div class="wf-dot"></div>
+                        <div class="wf-connector"></div>
+                        <div class="wf-node" style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:16px;width:380px;box-shadow:0 4px 20px rgba(0,0,0,0.3);overflow:hidden;">
+                            <div style="background:rgba(249,115,22,0.08);padding:14px 18px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #2a2a2a;">
+                                <div style="display:flex;align-items:center;gap:10px;">
+                                    <div style="background:#f97316;border-radius:8px;width:30px;height:30px;display:flex;align-items:center;justify-content:center;">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="white" stroke="none"><path d="M22 2L11 13"></path><path d="M22 2L15 22L11 13L2 9L22 2Z"></path></svg>
+                                    </div>
+                                    <span style="font-weight:600;font-size:14px;color:white;">Action</span>
+                                </div>
+                                <button style="background:none;border:none;cursor:pointer;color:#555;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg></button>
+                            </div>
+                            <div style="padding:18px;">
+                                <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;">
+                                    <img src="https://upload.wikimedia.org/wikipedia/commons/c/ca/LinkedIn_logo_initials.png" width="20" height="20" style="border-radius:3px;" />
+                                    <span style="font-weight:500;font-size:13px;color:white;">Auto post to LinkedIn</span>
+                                    <span style="background:#2a2a2a;color:#888;font-size:10px;padding:2px 8px;border-radius:4px;font-weight:600;letter-spacing:0.5px;">DATA</span>
+                                </div>
+                                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+                                    <span style="color:#777;font-size:12px;">Notify connections</span>
+                                    <label style="position:relative;width:40px;height:22px;cursor:pointer;">
+                                        <input type="checkbox" id="wf-notify" style="display:none;" />
+                                        <div id="wf-notify-track" style="position:absolute;inset:0;background:#333;border-radius:11px;transition:0.2s;"></div>
+                                        <div id="wf-notify-dot" style="position:absolute;top:2px;left:2px;width:18px;height:18px;background:white;border-radius:50%;transition:0.2s;box-shadow:0 1px 3px rgba(0,0,0,0.4);"></div>
+                                    </label>
+                                </div>
+                                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+                                    <span style="color:#777;font-size:12px;">Include image</span>
+                                    <label style="position:relative;width:40px;height:22px;cursor:pointer;">
+                                        <input type="checkbox" id="wf-image" checked style="display:none;" />
+                                        <div id="wf-image-track" style="position:absolute;inset:0;background:#22c55e;border-radius:11px;transition:0.2s;"></div>
+                                        <div id="wf-image-dot" style="position:absolute;top:2px;right:2px;width:18px;height:18px;background:white;border-radius:50%;transition:0.2s;box-shadow:0 1px 3px rgba(0,0,0,0.4);"></div>
+                                    </label>
+                                </div>
+                                <p style="color:#777;font-size:12px;margin-bottom:6px;">Post visibility</p>
+                                <select style="width:100%;background:#0e0e0e;border:1px solid #333;border-radius:8px;padding:7px 12px;font-size:12px;color:white;cursor:pointer;">
+                                    <option selected>Public</option><option>Connections only</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="wf-connector"></div>
+                        <button style="width:40px;height:40px;border-radius:50%;border:2px dashed #333;background:#1a1a1a;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#555;transition:all 0.3s;" onmouseenter="this.style.borderColor='#f97316';this.style.color='#f97316'" onmouseleave="this.style.borderColor='#333';this.style.color='#555'">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                        </button>
+                    </div>
+
+                </div>
+
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // Auth provided by auth-modal.js
+
+        // ========== Sidebar Collapse ==========
+        const sidebarEl = document.getElementById('sidebar');
+        document.getElementById('sidebar-toggle-btn').addEventListener('click', () => {
+            sidebarEl.classList.toggle('sidebar-collapsed');
+        });
+        sidebarEl.querySelector('.sidebar-logo')?.addEventListener('click', (e) => {
+            if (sidebarEl.classList.contains('sidebar-collapsed')) {
+                e.preventDefault();
+                sidebarEl.classList.remove('sidebar-collapsed');
+            }
+        });
+
+        // Inject settings modal
+        RetracSettingsModal.inject();
+
+        // ========== Auth ==========
+        const user = getCurrentUser();
+        if (user) {
+            const sa = document.getElementById('sidebar-auth');
+            const name = user.name || user.email.split('@')[0];
+            const av = user.picture
+                ? `<img src="${user.picture}" class="w-9 h-9 rounded-full object-cover shrink-0" referrerpolicy="no-referrer" />`
+                : `<div class="w-9 h-9 rounded-full bg-[#333] flex items-center justify-center text-white text-[14px] font-semibold shrink-0">${name[0].toUpperCase()}</div>`;
+            sa.innerHTML = `
+                <div class="bg-[#2D8CFF] rounded-2xl p-4 flex items-center justify-between mb-3 cursor-pointer hover:brightness-110 transition">
+                    <div class="flex items-center gap-3">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="white" stroke="none"><path d="M12 2L15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2z"></path></svg>
+                        <div><p class="text-white text-[13px] font-semibold">Go Pro</p><p class="text-white/70 text-[10px]">Upgrade your plan</p></div>
+                    </div>
+                    <span class="bg-white text-black text-[11px] font-semibold px-3 py-1 rounded-full">Upgrade</span>
+                </div>
+                <div class="flex items-center gap-3 px-1 py-1 cursor-pointer hover:bg-[#232323] rounded-lg transition-colors" onclick="logoutUser()">
+                    ${av}
+                    <div class="flex-1 min-w-0"><p class="text-white text-[13px] font-medium truncate">${name}</p><p class="text-[#666] text-[10px]">Free</p></div>
+                </div>`;
+        }
+
+        // ========== LinkedIn App Workflow ==========
+        const appsOverview = document.getElementById('apps-overview');
+        const linkedinWorkflow = document.getElementById('linkedin-workflow');
+
+        document.getElementById('open-linkedin-app').addEventListener('click', () => {
+            appsOverview.classList.add('hidden');
+            linkedinWorkflow.classList.remove('hidden');
+        });
+
+        document.getElementById('back-to-apps').addEventListener('click', () => {
+            linkedinWorkflow.classList.add('hidden');
+            appsOverview.classList.remove('hidden');
+        });
+
+        // Toggle switches
+        function setupToggleSwitch(checkboxId, trackId, dotId) {
+            const cb = document.getElementById(checkboxId);
+            const track = document.getElementById(trackId);
+            const dot = document.getElementById(dotId);
+            if (!cb || !track || !dot) return;
+
+            function updateVisual() {
+                if (cb.checked) {
+                    track.style.background = '#22c55e';
+                    dot.style.left = 'auto';
+                    dot.style.right = '2px';
+                } else {
+                    track.style.background = '#d1d5db';
+                    dot.style.right = 'auto';
+                    dot.style.left = '2px';
+                }
+            }
+            updateVisual();
+
+            const parent = cb.closest('label');
+            if (parent) {
+                parent.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    cb.checked = !cb.checked;
+                    updateVisual();
+                });
+            }
+        }
+
+        setupToggleSwitch('wf-notify', 'wf-notify-track', 'wf-notify-dot');
+        setupToggleSwitch('wf-image', 'wf-image-track', 'wf-image-dot');
+
+        // Run workflow — epic cascading animation
+        document.getElementById('run-workflow-btn')?.addEventListener('click', () => {
+            const btn = document.getElementById('run-workflow-btn');
+            if (btn.dataset.running === 'true') return;
+            btn.dataset.running = 'true';
+
+            const origHTML = btn.innerHTML;
+            const nodes = document.querySelectorAll('.wf-node');
+            const connectors = document.querySelectorAll('.wf-connector');
+            const dots = document.querySelectorAll('.wf-dot');
+
+            // Phase 1: Button changes to "Running..."
+            btn.style.background = 'linear-gradient(135deg, #22c55e, #16a34a)';
+            btn.innerHTML = `<div style="width:14px;height:14px;border:2px solid white;border-top-color:transparent;border-radius:50%;animation:spin 0.6s linear infinite;"></div> Running...`;
+
+            // Add spin keyframe if not exists
+            if (!document.getElementById('wf-spin-style')) {
+                const s = document.createElement('style');
+                s.id = 'wf-spin-style';
+                s.textContent = '@keyframes spin{to{transform:rotate(360deg)}}';
+                document.head.appendChild(s);
+            }
+
+            // Phase 2: Cascade through each node
+            const totalNodes = nodes.length;
+            const stepDelay = 1200;
+
+            nodes.forEach((node, i) => {
+                // Activate connector before node
+                setTimeout(() => {
+                    if (connectors[i * 2]) connectors[i * 2].classList.add('running');
+                    if (dots[i]) dots[i].classList.add('running');
+                    if (connectors[i * 2 + 1]) connectors[i * 2 + 1].classList.add('running');
+                }, i * stepDelay);
+
+                // Activate node with glow
+                setTimeout(() => {
+                    node.style.borderColor = '#22c55e';
+                    node.style.boxShadow = '0 0 30px rgba(34,197,94,0.25), 0 0 60px rgba(34,197,94,0.1)';
+                    node.classList.add('running');
+
+                    // Add a green checkmark badge
+                    const badge = document.createElement('div');
+                    badge.className = 'wf-run-badge';
+                    badge.style.cssText = 'position:absolute;top:-8px;right:-8px;width:24px;height:24px;background:#22c55e;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(34,197,94,0.5);animation:wfSuccessPop 0.4s ease;z-index:5;';
+                    badge.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+                    node.style.position = 'relative';
+                    node.appendChild(badge);
+                }, i * stepDelay + 400);
+
+                // Settle node
+                setTimeout(() => {
+                    node.style.borderColor = '#22c55e';
+                    node.style.boxShadow = '0 0 15px rgba(34,197,94,0.15), 0 4px 20px rgba(0,0,0,0.3)';
+                    if (dots[i]) { dots[i].classList.remove('running'); dots[i].classList.add('done'); }
+                    if (connectors[i * 2]) connectors[i * 2].classList.remove('running');
+                    if (connectors[i * 2 + 1]) connectors[i * 2 + 1].classList.remove('running');
+                    connectors.forEach(c => { if (!c.classList.contains('running')) { c.style.background = ''; } });
+                }, i * stepDelay + 900);
+            });
+
+            // Phase 3: Success state
+            const totalTime = totalNodes * stepDelay + 600;
+            setTimeout(() => {
+                btn.style.background = '#22c55e';
+                btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg> Success!`;
+            }, totalTime);
+
+            // Phase 4: Reset everything
+            setTimeout(() => {
+                btn.style.background = '#22c55e';
+                btn.innerHTML = origHTML;
+                btn.dataset.running = 'false';
+
+                nodes.forEach(node => {
+                    node.style.borderColor = '#2a2a2a';
+                    node.style.boxShadow = '0 4px 20px rgba(0,0,0,0.3)';
+                    node.classList.remove('running', 'done');
+                    node.querySelectorAll('.wf-run-badge').forEach(b => b.remove());
+                });
+                dots.forEach(d => { d.classList.remove('running', 'done'); });
+                connectors.forEach(c => { c.classList.remove('running'); c.style.background = ''; });
+            }, totalTime + 2000);
+        });
+
+        // Add node button hover
+        document.getElementById('add-node-btn')?.addEventListener('mouseenter', function() {
+            this.style.borderColor = '#6366f1';
+            this.style.color = '#6366f1';
+            this.style.background = '#222';
+        });
+        document.getElementById('add-node-btn')?.addEventListener('mouseleave', function() {
+            this.style.borderColor = '#333';
+            this.style.color = '#555';
+            this.style.background = '#1a1a1a';
+        });
+    </script>
+</body>
+</html>

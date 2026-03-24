@@ -10,6 +10,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <script src="js/retrac-api.js"></script>
     <script src="js/settings-modal.js"></script>
+    <script src="js/auth-modal.js"></script>
     <script src="js/search-chat.js"></script>
     <style>
         body { font-family: 'Inter', sans-serif; background-color: #000; display: flex; height: 100vh; margin: 0; color: white; overflow: hidden; }
@@ -56,16 +57,13 @@
             <span class="text-[13px] text-[#707070] font-mono tracking-wide">Ctrl O</span>
         </a>
         <nav class="flex flex-col gap-1.5 px-1">
-            <div class="flex items-center gap-3.5 py-2 px-3 rounded-lg text-[#555] cursor-default"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="2"></rect><rect x="14" y="3" width="7" height="7" rx="2"></rect><rect x="14" y="14" width="7" height="7" rx="2"></rect><rect x="3" y="14" width="7" height="7" rx="2"></rect></svg><span class="text-[15px] font-medium">Apps</span><span class="text-[11px] text-[#555] bg-[#2a2a2a] px-2 py-0.5 rounded-full ml-auto">Soon</span></div>
+            <a href="apps.html" class="flex items-center gap-3.5 py-2 px-3 rounded-lg hover:bg-[#232323] transition-colors text-[#e0e0e0] hover:text-white"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="2"></rect><rect x="14" y="3" width="7" height="7" rx="2"></rect><rect x="14" y="14" width="7" height="7" rx="2"></rect><rect x="3" y="14" width="7" height="7" rx="2"></rect></svg><span class="text-[15px] font-medium">Apps</span></a>
             <a href="images.html" class="flex items-center gap-3.5 py-2 px-3 rounded-lg bg-[#232323] text-white"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg><span class="text-[15px] font-medium">Images</span></a>
             <a href="documents.html" class="flex items-center gap-3.5 py-2 px-3 rounded-lg hover:bg-[#232323] transition-colors text-[#e0e0e0] hover:text-white"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M 8 22 H 18 A 2 2 0 0 0 20 20 V 4 A 2 2 0 0 0 18 2 H 6 A 2 2 0 0 0 4 4 V 16 L 8 22 Z"></path><path d="M 4 16 H 6 A 2 2 0 0 1 8 18 V 22"></path><line x1="10" y1="10" x2="15" y2="10"></line><line x1="10" y1="14" x2="16" y2="14"></line></svg><span class="text-[15px] font-medium">Documents</span></a>
             <a href="projects.html" class="flex items-center gap-3.5 py-2 px-3 rounded-lg hover:bg-[#232323] transition-colors text-[#e0e0e0] hover:text-white"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"></path><path d="M2 10h20"></path></svg><span class="text-[15px] font-medium">Projects</span></a>
             <a href="#" id="search-chat-btn" class="flex items-center gap-3.5 py-2 px-3 rounded-lg hover:bg-[#232323] transition-colors text-[#e0e0e0] hover:text-white"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="8"></circle><path d="M21 21l-4.3-4.3"></path></svg><span class="text-[15px] font-medium">Search Chat</span></a>
         </nav>
-        <div class="sidebar-hide mt-6 px-1 flex-1 overflow-y-auto">
-            <p class="text-[#666] text-[12px] font-medium mb-2 px-3">Today</p>
-            <a href="index.html" class="flex items-center py-2 px-3 rounded-lg hover:bg-[#232323] transition-colors text-[#e0e0e0] hover:text-white text-[14px]">General Chat</a>
-        </div>
+        <div id="chat-history-container" class="sidebar-hide mt-6 px-1 flex-1 overflow-y-auto"></div>
         <div id="sidebar-auth" class="mt-auto flex flex-col gap-3 pt-6 pb-2"></div>
     </aside>
 
@@ -133,15 +131,17 @@
                             </svg>
                         </button>
 
-                        <!-- Flux Model Selector -->
+                        <!-- Model Selector -->
                         <div class="relative ml-1">
                             <button id="img-model-btn" class="flex items-center gap-2 bg-[#212121] border border-[#3a3a3a] rounded-full px-3 py-1.5 hover:bg-[#2a2a2a] transition-colors">
-                                <span id="img-model-label" class="text-[#d1d5db] text-[14px] font-medium">Flux</span>
+                                <span id="img-model-label" class="text-[#d1d5db] text-[14px] font-medium">Nano Banana</span>
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2" class="ml-0.5"><polyline points="8 10 12 6 16 10"></polyline><polyline points="16 14 12 18 8 14"></polyline></svg>
                             </button>
-                            <div id="img-model-dd" style="display:none; position:absolute; bottom:100%; left:0; margin-bottom:8px; width:130px; background:#2a2a2a; border:1px solid #3e3e3e; border-radius:12px; padding:4px; box-shadow:0 12px 40px rgba(0,0,0,0.6); z-index:60;">
-                                <button class="img-model-opt w-full text-left px-4 py-2.5 text-[14px] rounded-lg hover:bg-[#333] transition-colors text-white" data-model="Flux">Flux</button>
-                                <button class="img-model-opt w-full text-left px-4 py-2.5 text-[14px] rounded-lg hover:bg-[#333] transition-colors text-[#888]" data-model="SDXL">SDXL</button>
+                            <div id="img-model-dd" style="display:none; position:absolute; bottom:100%; left:0; margin-bottom:8px; width:190px; background:#2a2a2a; border:1px solid #3e3e3e; border-radius:12px; padding:4px; box-shadow:0 12px 40px rgba(0,0,0,0.6); z-index:60;">
+                                <button class="img-model-opt w-full text-left px-4 py-2.5 text-[14px] rounded-lg hover:bg-[#333] transition-colors text-white" data-model="Nano Banana">Nano Banana</button>
+                                <button class="img-model-opt w-full text-left px-4 py-2.5 text-[14px] rounded-lg hover:bg-[#333] transition-colors text-[#888]" data-model="Nano Banana Pro">Nano Banana Pro</button>
+                                <button class="img-model-opt w-full text-left px-4 py-2.5 text-[14px] rounded-lg hover:bg-[#333] transition-colors text-[#888]" data-model="Nano Banana 2">Nano Banana 2</button>
+                                <button class="img-model-opt w-full text-left px-4 py-2.5 text-[14px] rounded-lg hover:bg-[#333] transition-colors text-[#888]" data-model="Imagen">Imagen 4</button>
                             </div>
                         </div>
 
@@ -231,9 +231,7 @@
     </div>
 
     <script>
-        // ========== LOCAL AUTH ==========
-        function getCurrentUser() { return JSON.parse(localStorage.getItem('retrac_current_user') || 'null'); }
-        function logoutUser() { localStorage.removeItem('retrac_current_user'); location.reload(); }
+        // Auth provided by auth-modal.js
 
         // ========== Sidebar Collapse ==========
         const sidebarEl = document.getElementById('sidebar');
@@ -390,11 +388,11 @@
             try {
                 const style = document.getElementById('img-style-label').textContent;
                 const ratio = document.getElementById('img-ratio-label').textContent;
+                const selectedModel = document.getElementById('img-model-label').textContent;
                 let fullPrompt = prompt;
                 if (style && style !== 'Style' && style !== 'No Style') fullPrompt += `, ${style} style`;
-                if (ratio && ratio !== '1:1') fullPrompt += `, ${ratio} aspect ratio`;
 
-                const result = await RetracAPI.generateImage(fullPrompt);
+                const result = await RetracAPI.generateImage(fullPrompt, selectedModel, ratio);
                 if (result.error) {
                     creationsView.innerHTML = `<div class="flex flex-col items-center justify-center h-full"><p class="text-red-400 text-[14px]">${result.error}</p></div>`;
                     return;

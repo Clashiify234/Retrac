@@ -18,10 +18,16 @@ const RetracChatUI = {
         this.textarea = options.textarea;
         this.showChatView = options.showChatView || (() => {});
         this.onChatCreated = options.onChatCreated || (() => {});
+        this.onModelRestored = options.onModelRestored || null;
 
         // Load existing chat if any
         this.currentChat = this._freshChat();
         if (this.currentChat && this.currentChat.messages.length > 0) {
+            // Restore model from chat
+            if (this.currentChat.model) {
+                this.currentModel = this.currentChat.model;
+                this.onModelRestored?.(this.currentChat.model);
+            }
             this.showChatView();
             this.renderChatHistory();
         }
@@ -109,6 +115,7 @@ const RetracChatUI = {
         let fullResponse = '';
         let activities = [];
         let sources = [];
+        const streamStartTime = Date.now();
 
         await RetracAPI.streamChat({
             model: this.currentModel,
@@ -133,9 +140,10 @@ const RetracChatUI = {
             },
             onDone: () => {
                 if (fullResponse) {
-                    RetracChatHistory.addMessage(this.currentChat.id, 'assistant', fullResponse);
+                    const thinkingDuration = ((Date.now() - streamStartTime) / 1000).toFixed(1);
+                    RetracChatHistory.addMessage(this.currentChat.id, 'assistant', fullResponse, this.currentModel);
                     this._refreshCurrentChat();
-                    this.finalizeAssistantMessage(assistantEl, fullResponse, activities, sources);
+                    this.finalizeAssistantMessage(assistantEl, fullResponse, activities, sources, thinkingDuration);
                 }
                 this.isStreaming = false;
                 this.updateSidebarHistory();
@@ -152,7 +160,7 @@ const RetracChatUI = {
             if (msg.role === 'user') {
                 this.renderUserMessage(msg.content);
             } else {
-                const el = this.createAssistantMessageEl();
+                const el = this.createAssistantMessageEl(msg.model);
                 this.finalizeAssistantMessage(el, msg.content);
             }
         }
@@ -182,10 +190,10 @@ const RetracChatUI = {
     },
 
     // Create assistant message element (for streaming)
-    createAssistantMessageEl() {
+    createAssistantMessageEl(model) {
         if (!this.chatContainer) return document.createElement('div');
 
-        const modelIcon = this.getModelIcon(this.currentModel);
+        const modelIcon = this.getModelIcon(model || this.currentModel);
 
         const msgEl = document.createElement('div');
         msgEl.className = 'flex gap-3 mb-6 chat-message assistant-message';
@@ -224,7 +232,7 @@ const RetracChatUI = {
         return msgEl;
     },
 
-    // Add a live activity item (search, visit, analyze)
+    // Add a live activity item with rich icons per type
     addActivity(el, activityType, text) {
         const activityList = el.querySelector('.activity-list');
         if (!activityList) return;
@@ -232,18 +240,42 @@ const RetracChatUI = {
         const icons = {
             search: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><path d="M21 21l-4.3-4.3"></path></svg>`,
             visit: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>`,
-            think: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg>`,
-            analyze: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>`
+            think: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><path d="M12 2a7 7 0 0 1 7 7c0 2.38-1.19 4.47-3 5.74V17a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 0 1 7-7z"></path><line x1="9" y1="21" x2="15" y2="21"></line></svg>`,
+            analyze: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>`,
+            plan: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#06b6d4" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>`,
+            compare: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2"><path d="M16 3h5v5"></path><path d="M8 3H3v5"></path><path d="M12 22v-8.3a4 4 0 0 0-1.172-2.872L3 3"></path><path d="m15 9 6-6"></path></svg>`,
+            evaluate: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f472b6" stroke-width="2"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>`,
+            synthesize: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>`,
+            verify: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fb923c" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><path d="m9 12 2 2 4-4"></path></svg>`,
+            structure: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>`
         };
+
+        // For visit activities, try to show favicon
+        let iconHTML = icons[activityType] || icons.think;
+        if (activityType === 'visit') {
+            const domainMatch = text.match(/Reading\s+(?:www\.)?([^\/\s]+)/);
+            if (domainMatch) {
+                const domain = domainMatch[1];
+                iconHTML = `<img src="https://www.google.com/s2/favicons?domain=${domain}&sz=32" width="14" height="14" style="border-radius:2px;" onerror="this.outerHTML='${icons.visit.replace(/'/g, "\\'")}'"/>`;
+            }
+        }
 
         const item = document.createElement('div');
         item.className = 'flex items-center gap-2 py-1 activity-item';
         item.style.cssText = 'animation: fadeSlideIn 0.3s ease-out forwards; opacity: 0;';
-        item.innerHTML = `${icons[activityType] || icons.think}<span class="text-[#999] text-[12px]">${this.escapeHtml(text)}</span>`;
+        item.innerHTML = `${iconHTML}<span class="text-[#999] text-[12px]">${this.escapeHtml(text)}</span>`;
         activityList.appendChild(item);
 
+        // Update main status text
         const statusSpan = el.querySelector('.thinking-status span');
         if (statusSpan) statusSpan.textContent = text;
+
+        // Auto-scroll activity list if it's getting long (show latest)
+        if (activityList.children.length > 6) {
+            activityList.style.maxHeight = '180px';
+            activityList.style.overflowY = 'auto';
+            activityList.scrollTop = activityList.scrollHeight;
+        }
 
         this.scrollToBottom();
     },
@@ -277,7 +309,7 @@ const RetracChatUI = {
     },
 
     // Finalize assistant message
-    finalizeAssistantMessage(el, fullText, activities = [], sources = []) {
+    finalizeAssistantMessage(el, fullText, activities = [], sources = [], thinkingDuration = null) {
         const contentEl = el.querySelector('.assistant-content');
         if (!contentEl) return;
 
@@ -287,24 +319,52 @@ const RetracChatUI = {
 
         if (thinkingBlock && activities.length > 0) {
             const count = activities.length;
+            const visitCount = activities.filter(a => a.type === 'visit').length;
+            const durationStr = thinkingDuration ? ` · ${thinkingDuration}s` : '';
+            const label = visitCount > 0 ? `Researched ${visitCount} sources in ${count} steps${durationStr}` : `Thought for ${count} steps${durationStr}`;
+
+            const activityIcons = {
+                search: (c) => `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><path d="M21 21l-4.3-4.3"></path></svg>`,
+                visit: (c) => `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>`,
+                think: (c) => `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2"><path d="M12 2a7 7 0 0 1 7 7c0 2.38-1.19 4.47-3 5.74V17a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 0 1 7-7z"></path><line x1="9" y1="21" x2="15" y2="21"></line></svg>`,
+                analyze: (c) => `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>`,
+                plan: (c) => `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>`,
+                compare: (c) => `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2"><path d="M16 3h5v5"></path><path d="M8 3H3v5"></path><path d="M12 22v-8.3a4 4 0 0 0-1.172-2.872L3 3"></path><path d="m15 9 6-6"></path></svg>`,
+                evaluate: (c) => `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>`,
+                synthesize: (c) => `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>`,
+                verify: (c) => `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><path d="m9 12 2 2 4-4"></path></svg>`,
+                structure: (c) => `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>`
+            };
+            const activityColors = { search: '#3b82f6', visit: '#8b5cf6', think: '#f59e0b', analyze: '#22c55e', plan: '#06b6d4', compare: '#a78bfa', evaluate: '#f472b6', synthesize: '#34d399', verify: '#fb923c', structure: '#60a5fa' };
+
             thinkingBlock.innerHTML = `
                 <div class="thinking-toggle flex items-center gap-2 py-1.5" onclick="this.parentElement.querySelector('.thinking-content').classList.toggle('collapsed'); this.querySelector('.thinking-chevron').classList.toggle('collapsed');">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="2" class="shrink-0"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg>
-                    <span class="text-[#888] text-[13px] font-medium">Thought for ${count} steps</span>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="2" class="shrink-0"><path d="M12 2a7 7 0 0 1 7 7c0 2.38-1.19 4.47-3 5.74V17a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 0 1 7-7z"></path><line x1="9" y1="21" x2="15" y2="21"></line></svg>
+                    <span class="text-[#888] text-[13px] font-medium">${label}</span>
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="2.5" class="thinking-chevron collapsed shrink-0"><polyline points="6 9 12 15 18 9"></polyline></svg>
                 </div>
-                <div class="thinking-content collapsed bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl px-3 py-2 mt-1 mb-2" style="max-height: 300px; overflow-y: auto;">
+                <div class="thinking-content collapsed bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl px-3 py-2 mt-1 mb-2" style="max-height: 400px; overflow-y: auto;">
                     ${activities.map(act => {
-                        const colors = { search: '#3b82f6', visit: '#8b5cf6', think: '#f59e0b', analyze: '#22c55e' };
-                        const c = colors[act.type] || '#888';
-                        const iconMap = {
-                            search: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><path d="M21 21l-4.3-4.3"></path></svg>`,
-                            visit: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>`,
-                            think: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg>`,
-                            analyze: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>`
-                        };
-                        return `<div class="flex items-center gap-2 py-1">${iconMap[act.type] || iconMap.think}<span class="text-[#777] text-[12px]">${this.escapeHtml(act.text)}</span></div>`;
+                        const c = activityColors[act.type] || '#888';
+                        const iconFn = activityIcons[act.type] || activityIcons.think;
+                        let icon = iconFn(c);
+                        // For visit, try favicon
+                        if (act.type === 'visit') {
+                            const dm = act.text.match(/Reading\s+(?:www\.)?([^\/\s]+)/);
+                            if (dm) {
+                                icon = `<img src="https://www.google.com/s2/favicons?domain=${dm[1]}&sz=32" width="13" height="13" style="border-radius:2px;" onerror="this.outerHTML='${iconFn(c).replace(/'/g, "\\'")}'"/>`;
+                            }
+                        }
+                        return `<div class="flex items-center gap-2 py-1">${icon}<span class="text-[#777] text-[12px]">${this.escapeHtml(act.text)}</span></div>`;
                     }).join('')}
+                </div>
+            `;
+        } else if (thinkingBlock && thinkingDuration) {
+            // No activities but we have a duration — show simple "Thought for Xs"
+            thinkingBlock.innerHTML = `
+                <div class="thinking-toggle flex items-center gap-2 py-1.5">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="2" class="shrink-0"><path d="M12 2a7 7 0 0 1 7 7c0 2.38-1.19 4.47-3 5.74V17a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 0 1 7-7z"></path><line x1="9" y1="21" x2="15" y2="21"></line></svg>
+                    <span class="text-[#888] text-[13px] font-medium">Thought for ${thinkingDuration}s</span>
                 </div>
             `;
         } else if (thinkingBlock) {
@@ -392,13 +452,15 @@ const RetracChatUI = {
 
         // Get favicon URL for a domain
         const favicon = (domain) => `https://www.google.com/s2/favicons?domain=${domain}&sz=32`;
+        // Ensure URLs have protocol
+        const fixUrl = (url) => (!url.startsWith('http://') && !url.startsWith('https://')) ? 'https://' + url : url;
 
         sourcesBar.innerHTML = `
             <div class="flex items-center gap-2">
                 <span class="text-[#666] text-[12px] font-medium">Sources</span>
                 <div class="flex items-center gap-1">
                     ${visibleSources.map(s => `
-                        <a href="${this.escapeHtml(s.url)}" target="_blank" rel="noopener" class="w-6 h-6 rounded-full bg-[#2a2a2a] border border-[#333] flex items-center justify-center hover:border-[#555] transition-colors" title="${this.escapeHtml(s.domain)}">
+                        <a href="${fixUrl(this.escapeHtml(s.url))}" target="_blank" rel="noopener" class="w-6 h-6 rounded-full bg-[#2a2a2a] border border-[#333] flex items-center justify-center hover:border-[#555] transition-colors" title="${this.escapeHtml(s.domain)}">
                             <img src="${favicon(s.domain)}" width="14" height="14" class="rounded-sm" onerror="this.style.display='none'" />
                         </a>
                     `).join('')}
@@ -411,10 +473,10 @@ const RetracChatUI = {
             </div>
             <div class="sources-expanded hidden mt-2 bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl overflow-hidden">
                 ${sources.map(s => `
-                    <a href="${this.escapeHtml(s.url)}" target="_blank" rel="noopener" class="flex items-center gap-3 px-3 py-2 hover:bg-[#252525] transition-colors">
+                    <a href="${fixUrl(this.escapeHtml(s.url))}" target="_blank" rel="noopener" class="flex items-center gap-3 px-3 py-2 hover:bg-[#252525] transition-colors">
                         <img src="${favicon(s.domain)}" width="16" height="16" class="rounded-sm shrink-0" onerror="this.style.display='none'" />
                         <span class="text-[#999] text-[12px] truncate">${this.escapeHtml(s.domain)}</span>
-                        <span class="text-[#555] text-[11px] truncate flex-1 text-right">${this.escapeHtml(s.url.replace('https://', ''))}</span>
+                        <span class="text-[#555] text-[11px] truncate flex-1 text-right">${this.escapeHtml(s.url.replace(/^https?:\/\//, ''))}</span>
                     </a>
                 `).join('')}
             </div>
@@ -664,38 +726,10 @@ const RetracChatUI = {
     },
 
     updateSidebarHistory() {
-        const historyContainer = document.getElementById('chat-history-container') || document.querySelector('.sidebar-hide.mt-6');
-        if (!historyContainer) return;
-
-        const chats = RetracChatHistory.getAll();
-        const today = [], yesterday = [], older = [];
-        const now = Date.now(), dayMs = 86400000;
-
-        for (const chat of chats) {
-            const age = now - chat.createdAt;
-            if (age < dayMs) today.push(chat);
-            else if (age < dayMs * 2) yesterday.push(chat);
-            else older.push(chat);
+        // Use the shared renderer from retrac-api.js
+        if (typeof renderSidebarChatHistory === 'function') {
+            renderSidebarChatHistory();
         }
-
-        let html = '';
-        if (today.length > 0) {
-            html += '<p class="text-[#666] text-[12px] font-medium mb-2 px-3">Today</p>';
-            html += today.map(c => this._chatEntryHTML(c)).join('');
-        }
-        if (yesterday.length > 0) {
-            html += '<p class="text-[#666] text-[12px] font-medium mb-2 mt-4 px-3">Yesterday</p>';
-            html += yesterday.map(c => this._chatEntryHTML(c)).join('');
-        }
-        if (older.length > 0) {
-            html += '<p class="text-[#666] text-[12px] font-medium mb-2 mt-4 px-3">Previous</p>';
-            html += older.slice(0, 10).map(c => this._chatEntryHTML(c)).join('');
-        }
-        if (!html) html = '<p class="text-[#555] text-[13px] px-3">No chats yet</p>';
-        historyContainer.innerHTML = html;
-
-        // Wire up events on the new entries
-        this._wireChatEntryEvents(historyContainer);
     },
 
     newChat() {
