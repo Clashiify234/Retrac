@@ -33,7 +33,9 @@ const COST_RATES = {
     'claude-sonnet-4-20250514': { input: 3.00, output: 15.00 },
     'claude-haiku-4-5-20251001': { input: 0.80, output: 4.00 },
     'gpt-4o': { input: 2.50, output: 10.00 },
-    'gpt-4.1': { input: 2.00, output: 8.00 }
+    'gpt-4.1': { input: 2.00, output: 8.00 },
+    'ollama': { input: 0, output: 0 },
+    'ensemble': { input: 0, output: 0 }
 };
 
 function calculateCost(modelId, inputTokens, outputTokens) {
@@ -222,6 +224,10 @@ const upload = multer({ storage, limits: { fileSize: 50 * 1024 * 1024 } });
 // ============ Resolve which provider + key to use ============
 
 function resolveProvider(model) {
+    // Ollama local models (no API key needed)
+    if (model === 'Smart Ensemble') return 'ensemble';
+    if (model.startsWith('Qwen') || model.startsWith('Mistral') || model.startsWith('Phi-3') || model.startsWith('GLM-4') || model === 'DeepSeek V3 16B' || model.startsWith('Llama 3')) return 'ollama';
+    // Cloud providers
     if ((model.startsWith('Claude') || model.startsWith('claude')) && API_KEYS.anthropic) return 'anthropic';
     if ((model.startsWith('Gemini') || model.startsWith('gemini')) && API_KEYS.google) return 'google';
     if ((model.startsWith('GPT') || model.startsWith('gpt')) && API_KEYS.openai) return 'openai';
@@ -249,20 +255,70 @@ app.post('/api/chat', async (req, res) => {
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
 
-    try {
-        if (provider === 'anthropic') {
-            await streamClaude(res, messages, API_KEYS.anthropic, model, searchWeb, deepResearch, 0, handwriting);
-        } else if (provider === 'google') {
-            await streamGemini(res, messages, API_KEYS.google, model, searchWeb, deepResearch, handwriting);
-        } else if (provider === 'openai') {
-            await streamOpenAI(res, messages, API_KEYS.openai, model, searchWeb, deepResearch, handwriting);
+    // Fallback chain: if a model is unavailable (503/429/overloaded), try alternatives
+    const fallbackChains = {
+        'Gemini 3 Pro': ['Gemini 2.5 Pro', 'Gemini 2.5 Flash', 'Claude Haiku 4.5'],
+        'Gemini 2.5 Pro': ['Gemini 2.5 Flash', 'Gemini 3 Pro', 'Claude Haiku 4.5'],
+        'Gemini 2.5 Flash': ['Gemini 2.5 Pro', 'Claude Haiku 4.5'],
+        'Claude Opus 4': ['Claude Sonnet 4.5', 'Claude Haiku 4.5', 'Gemini 2.5 Pro'],
+        'Claude Sonnet 4.5': ['Claude Haiku 4.5', 'Claude Opus 4', 'Gemini 2.5 Pro'],
+        'Claude Haiku 4.5': ['Claude Sonnet 4.5', 'Gemini 2.5 Flash'],
+        'GPT-5.1': ['GPT-5.2', 'Claude Haiku 4.5', 'Gemini 2.5 Flash'],
+        'GPT-5.2': ['GPT-5.1', 'Claude Haiku 4.5', 'Gemini 2.5 Flash'],
+        'Smart Ensemble': ['Qwen 3 14B', 'Claude Haiku 4.5', 'Gemini 2.5 Flash'],
+        'Qwen 3 14B': ['Mistral 7B', 'Claude Haiku 4.5', 'Gemini 2.5 Flash'],
+        'Mistral 7B': ['Qwen 3 14B', 'Claude Haiku 4.5', 'Gemini 2.5 Flash'],
+        'GLM-4 9B': ['Qwen 3 14B', 'Claude Haiku 4.5', 'Gemini 2.5 Flash'],
+        'Phi-3 14B': ['Qwen 3 14B', 'Claude Haiku 4.5', 'Gemini 2.5 Flash'],
+        'DeepSeek V3 16B': ['Qwen 3 14B', 'Claude Haiku 4.5', 'Gemini 2.5 Flash'],
+        'Llama 3.2': ['Qwen 3 14B', 'Claude Haiku 4.5', 'Gemini 2.5 Flash'],
+    };
+
+    const modelsToTry = [model, ...(fallbackChains[model] || ['Claude Haiku 4.5', 'Gemini 2.5 Flash'])];
+    let lastError = null;
+
+    for (let i = 0; i < modelsToTry.length; i++) {
+        const currentModel = modelsToTry[i];
+        const currentProvider = resolveProvider(currentModel);
+        if (!currentProvider) continue;
+
+        try {
+            if (i > 0) {
+                console.log(`Falling back from ${modelsToTry[i-1]} to ${currentModel}...`);
+                res.write(`data: ${JSON.stringify({ type: 'thinking', content: `${modelsToTry[i-1]} unavailable, switching to ${currentModel}...` })}\n\n`);
+            }
+
+            if (currentProvider === 'ollama') {
+                await streamOllama(res, messages, currentModel, searchWeb, deepResearch, handwriting);
+            } else if (currentProvider === 'ensemble') {
+                await streamEnsemble(res, messages, searchWeb, deepResearch, handwriting);
+            } else if (currentProvider === 'anthropic') {
+                await streamClaude(res, messages, API_KEYS.anthropic, currentModel, searchWeb, deepResearch, 0, handwriting);
+            } else if (currentProvider === 'google') {
+                await streamGemini(res, messages, API_KEYS.google, currentModel, searchWeb, deepResearch, handwriting);
+            } else if (currentProvider === 'openai') {
+                await streamOpenAI(res, messages, API_KEYS.openai, currentModel, searchWeb, deepResearch, handwriting);
+            }
+            return; // Success - exit the loop
+        } catch (err) {
+            lastError = err;
+            const isRetryable = err.status === 503 || err.status === 429 || err.status === 529
+                || (err.message && (err.message.includes('503') || err.message.includes('429')
+                || err.message.includes('Service Unavailable') || err.message.includes('Overloaded')
+                || err.message.includes('high demand') || err.message.includes('rate limit')
+                || err.message.includes('quota')));
+
+            if (!isRetryable || i === modelsToTry.length - 1) {
+                // Not retryable or last model in chain - give up
+                console.error('Chat error:', err.message);
+                const errorMsg = err.message || 'An error occurred while processing your request.';
+                res.write(`data: ${JSON.stringify({ error: errorMsg })}\n\n`);
+                res.write('data: [DONE]\n\n');
+                res.end();
+                return;
+            }
+            console.warn(`${currentModel} failed (${err.status || 'error'}): ${err.message}. Trying fallback...`);
         }
-    } catch (err) {
-        console.error('Chat error:', err.message);
-        const errorMsg = err.message || 'An error occurred while processing your request.';
-        res.write(`data: ${JSON.stringify({ error: errorMsg })}\n\n`);
-        res.write('data: [DONE]\n\n');
-        res.end();
     }
 });
 
@@ -779,6 +835,297 @@ async function streamOpenAI(res, messages, apiKey, modelName, searchWeb, deepRes
     res.end();
 }
 
+// ============ Ollama (Local) Streaming ============
+
+async function streamOllama(res, messages, modelName, searchWeb, deepResearch, handwriting = false) {
+    const startTime = Date.now();
+    const http = require('http');
+
+    const modelMap = {
+        'Qwen 3 14B': 'qwen3:14b',
+        'Mistral 7B': 'mistral:7b',
+        'Phi-3 14B': 'phi3:14b',
+        'GLM-4 9B': 'glm4:9b',
+        'DeepSeek V3 16B': 'deepseek-v3:16b',
+        'Llama 3.2': 'llama3.2'
+    };
+    const modelId = modelMap[modelName] || 'qwen3:14b';
+
+    // Local models get a simpler system prompt - they can't handle the full complex one
+    const localSystemPrompt = `You are Retrac AI, a helpful and intelligent assistant. Follow these rules:
+
+1. **Auto-detect the user's language** and respond in the same language naturally. If they write German, respond in German. If English, respond in English.
+2. **Match the user's energy**: Greeting → short greeting back. Simple question → direct answer. Complex question → detailed answer.
+3. **Be direct and useful**. No filler phrases like "Great question!" or "Sure!". Just answer.
+4. **For homework/school tasks**: Give clean, numbered answers matching the task structure. No drama, no essays. Just solve correctly.
+5. **For lists/hooks/ideas**: Number them, make each item specific and complete. Add brief explanation why each works.
+6. **For creative writing**: Just write it. No meta-commentary.
+7. **Have strong opinions** backed by evidence. Don't hedge with "it depends" without explaining what it depends on.
+8. **Use markdown** for formatting: **bold** for emphasis, ## for headers, numbered lists, code blocks.
+9. **Be concise but complete**. Every sentence should add value.`;
+
+    const ollamaMessages = [
+        { role: 'system', content: localSystemPrompt },
+        ...messages.map(m => ({
+            role: m.role === 'assistant' ? 'assistant' : 'user',
+            content: typeof m.content === 'string' ? m.content : extractTextFromContent(m.content)
+        }))
+    ];
+
+    res.write(`data: ${JSON.stringify({ type: 'thinking', content: `Processing with ${modelName} (local)...` })}\n\n`);
+
+    return new Promise((resolve, reject) => {
+        const postData = JSON.stringify({
+            model: modelId,
+            messages: ollamaMessages,
+            stream: true
+        });
+
+        const req = http.request({
+            hostname: 'localhost',
+            port: 11434,
+            path: '/api/chat',
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Content-Length': Buffer.byteLength(postData)
+            }
+        }, (ollamaRes) => {
+            let buffer = '';
+            let totalTokens = 0;
+
+            ollamaRes.on('data', (chunk) => {
+                buffer += chunk.toString();
+                const lines = buffer.split('\n');
+                buffer = lines.pop();
+
+                for (const line of lines) {
+                    if (!line.trim()) continue;
+                    try {
+                        const json = JSON.parse(line);
+                        if (json.message && json.message.content) {
+                            res.write(`data: ${JSON.stringify({ type: 'text', content: json.message.content })}\n\n`);
+                        }
+                        if (json.done) {
+                            totalTokens = (json.prompt_eval_count || 0) + (json.eval_count || 0);
+                            logUsage({
+                                provider: 'ollama',
+                                model: modelId,
+                                modelDisplay: modelName,
+                                type: 'chat',
+                                inputTokens: json.prompt_eval_count || 0,
+                                outputTokens: json.eval_count || 0,
+                                cost: 0,
+                                duration: Date.now() - startTime
+                            });
+                        }
+                    } catch (e) { /* skip malformed lines */ }
+                }
+            });
+
+            ollamaRes.on('end', () => {
+                res.write('data: [DONE]\n\n');
+                res.end();
+                resolve();
+            });
+        });
+
+        req.on('error', (err) => {
+            reject(new Error(`Ollama not running. Start Ollama first. (${err.message})`));
+        });
+
+        req.write(postData);
+        req.end();
+    });
+}
+
+// ============ Smart Ensemble (Multi-Model) Streaming ============
+
+async function streamEnsemble(res, messages, searchWeb, deepResearch, handwriting = false) {
+    const startTime = Date.now();
+    const http = require('http');
+
+    // Step 1: ROUTER - analyze the question to pick specialists
+    const lastMsg = typeof messages[messages.length - 1].content === 'string'
+        ? messages[messages.length - 1].content
+        : extractTextFromContent(messages[messages.length - 1].content);
+
+    res.write(`data: ${JSON.stringify({ type: 'thinking', content: 'Analyzing question...' })}\n\n`);
+    res.write(`data: ${JSON.stringify({ type: 'activity', activity: 'search', content: 'Routing to specialists...' })}\n\n`);
+
+    // Use a quick local model call to classify
+    const routerPrompt = `Classify this question into categories. Pick the 3 most relevant from: [general, creative, math, code, science, language, analysis, summary]. Return ONLY a JSON array of 3 strings. Question: "${lastMsg.substring(0, 500)}"`;
+
+    let categories = ['general', 'creative', 'analysis']; // default
+    try {
+        const routerRes = await fetch('http://localhost:11434/api/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                model: 'mistral:7b',
+                prompt: routerPrompt,
+                stream: false
+            })
+        });
+        const routerData = await routerRes.json();
+        const parsed = JSON.parse(routerData.response.match(/\[.*\]/)?.[0] || '["general","creative","analysis"]');
+        if (Array.isArray(parsed) && parsed.length >= 2) categories = parsed.slice(0, 3);
+    } catch (e) {
+        console.warn('Router fallback to defaults:', e.message);
+    }
+
+    // Map categories to specialist models
+    const specialistMap = {
+        'general': 'qwen3:14b',
+        'creative': 'qwen3:14b',
+        'math': 'qwen3:14b',
+        'code': 'glm4:9b',
+        'science': 'phi3:14b',
+        'language': 'qwen3:14b',
+        'analysis': 'qwen3:14b',
+        'summary': 'mistral:7b'
+    };
+
+    const specialistNames = {
+        'qwen3:14b': 'Qwen 3 14B',
+        'glm4:9b': 'GLM-4 9B',
+        'phi3:14b': 'Phi-3 14B',
+        'mistral:7b': 'Mistral 7B'
+    };
+
+    // Get unique models for the selected categories
+    const selectedModels = [...new Set(categories.map(c => specialistMap[c] || 'qwen3:14b'))];
+    // Ensure we have at least 2 different models, max 3
+    if (selectedModels.length < 2) selectedModels.push('mistral:7b');
+    const models = selectedModels.slice(0, 3);
+
+    res.write(`data: ${JSON.stringify({ type: 'activity', activity: 'search', content: `Selected specialists: ${models.map(m => specialistNames[m]).join(', ')}` })}\n\n`);
+
+    // Step 2: Query each specialist (sequentially since only 1 GPU)
+    const responses = [];
+    const systemPrompt = `You are a helpful AI assistant. Respond in the same language as the user. Be direct, accurate, and concise. Use markdown formatting.`;
+
+    for (let i = 0; i < models.length; i++) {
+        const model = models[i];
+        const name = specialistNames[model];
+        res.write(`data: ${JSON.stringify({ type: 'thinking', content: `${name} is thinking... (${i + 1}/${models.length})` })}\n\n`);
+        res.write(`data: ${JSON.stringify({ type: 'activity', activity: 'evaluate', content: `Querying ${name}...` })}\n\n`);
+
+        try {
+            const ollamaRes = await fetch('http://localhost:11434/api/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    model: model,
+                    messages: [
+                        { role: 'system', content: systemPrompt },
+                        ...messages.map(m => ({
+                            role: m.role === 'assistant' ? 'assistant' : 'user',
+                            content: typeof m.content === 'string' ? m.content : extractTextFromContent(m.content)
+                        }))
+                    ],
+                    stream: false
+                })
+            });
+            const data = await ollamaRes.json();
+            responses.push({ model: name, response: data.message?.content || '' });
+        } catch (e) {
+            console.warn(`Ensemble: ${name} failed:`, e.message);
+            responses.push({ model: name, response: '' });
+        }
+    }
+
+    // Step 3: JUDGE - combine the best parts
+    res.write(`data: ${JSON.stringify({ type: 'thinking', content: 'Judge is combining results...' })}\n\n`);
+    res.write(`data: ${JSON.stringify({ type: 'activity', activity: 'evaluate', content: 'Combining best answers...' })}\n\n`);
+
+    const validResponses = responses.filter(r => r.response.length > 0);
+
+    if (validResponses.length === 0) {
+        res.write(`data: ${JSON.stringify({ type: 'text', content: 'Ensemble failed - no models responded. Make sure Ollama is running with the required models.' })}\n\n`);
+        res.write('data: [DONE]\n\n');
+        res.end();
+        return;
+    }
+
+    if (validResponses.length === 1) {
+        // Only one model responded, stream it directly
+        res.write(`data: ${JSON.stringify({ type: 'text', content: validResponses[0].response })}\n\n`);
+        res.write('data: [DONE]\n\n');
+        res.end();
+        return;
+    }
+
+    const judgePrompt = `You are a Judge AI. You received answers from ${validResponses.length} specialist AI models to the same question. Your job:
+1. Identify the BEST parts of each answer
+2. Combine them into ONE superior answer
+3. Fix any errors or contradictions
+4. Write the final answer in the same language as the original question
+5. Do NOT mention that multiple models were used. Just write the best possible answer.
+
+ORIGINAL QUESTION: "${lastMsg}"
+
+${validResponses.map((r, i) => `--- ANSWER FROM ${r.model} ---\n${r.response}\n`).join('\n')}
+
+Now write the FINAL combined answer:`;
+
+    // Stream the judge's response
+    return new Promise((resolve, reject) => {
+        const postData = JSON.stringify({
+            model: 'qwen3:14b',
+            messages: [{ role: 'user', content: judgePrompt }],
+            stream: true
+        });
+
+        const req = http.request({
+            hostname: 'localhost',
+            port: 11434,
+            path: '/api/chat',
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Content-Length': Buffer.byteLength(postData)
+            }
+        }, (ollamaRes) => {
+            let buffer = '';
+            ollamaRes.on('data', (chunk) => {
+                buffer += chunk.toString();
+                const lines = buffer.split('\n');
+                buffer = lines.pop();
+                for (const line of lines) {
+                    if (!line.trim()) continue;
+                    try {
+                        const json = JSON.parse(line);
+                        if (json.message && json.message.content) {
+                            res.write(`data: ${JSON.stringify({ type: 'text', content: json.message.content })}\n\n`);
+                        }
+                        if (json.done) {
+                            logUsage({
+                                provider: 'ollama',
+                                model: 'ensemble',
+                                modelDisplay: 'Smart Ensemble',
+                                type: 'chat',
+                                inputTokens: json.prompt_eval_count || 0,
+                                outputTokens: json.eval_count || 0,
+                                cost: 0,
+                                duration: Date.now() - startTime
+                            });
+                        }
+                    } catch (e) { /* skip malformed lines */ }
+                }
+            });
+            ollamaRes.on('end', () => {
+                res.write('data: [DONE]\n\n');
+                res.end();
+                resolve();
+            });
+        });
+        req.on('error', (err) => reject(new Error(`Ollama error: ${err.message}`)));
+        req.write(postData);
+        req.end();
+    });
+}
+
 // ============ System Prompt Builder ============
 
 function buildSystemPrompt(searchWeb, deepResearch, needsSearch, sources) {
@@ -788,10 +1135,37 @@ function buildSystemPrompt(searchWeb, deepResearch, needsSearch, sources) {
 ## RULE ZERO — READ THIS FIRST
 ## ═══════════════════════════════════════════
 
-**BEFORE applying ANY other rule, check the message length and intent:**
-- If the user sends a GREETING (hi, hallo, hey, moin, yo, hello, guten tag, etc.) → respond with a short, warm, friendly greeting in their language. 1-2 sentences MAX. Example: "Hey! Schön dich zu sehen. Was kann ich für dich tun?" — NOTHING MORE. Do NOT write essays, analyses, or provocations in response to greetings.
-- If the user sends a SHORT simple question (under ~15 words, factual) → give a short, direct answer. Match the energy.
-- ONLY activate the full cognitive architecture below for SUBSTANTIAL questions that actually need depth.
+**BEFORE applying ANY other rule, DEEPLY ANALYZE the user's message to determine the EXACT response format needed:**
+
+### STEP 1: Detect the INTENT CATEGORY
+Read the message carefully. What does the user ACTUALLY want? Categorize it:
+
+- **GREETING** (hi, hallo, hey, moin) → Short, warm greeting. 1-2 sentences. "Hey! Was kann ich für dich tun?"
+- **FACTUAL QUESTION** (What is X? How many? When did?) → Direct answer. No storytelling. Get to the point.
+- **HOMEWORK/SCHOOL** (Aufgabe, Löse, Arbeitsblatt, Klasse, Hausaufgabe, bearbeite, definiere, berechne, SchulCloud) → SCHOOL MODE: Clean numbered answers (1a, 1b, 2...) matching the task structure. Correct, concise, age-appropriate. No drama.
+- **LIST REQUEST** (10 hooks, 5 ideas, give me examples) → Numbered list with brief intro. Each item complete and specific. Brief explanation per item if helpful.
+- **COMPARISON** (X vs Y, which is better, differences) → Structured comparison. Table or side-by-side format. Clear recommendation.
+- **HOW-TO / TUTORIAL** (how do I, guide me, steps to) → Step-by-step guide. Numbered steps. Practical and actionable.
+- **CODE / TECHNICAL** (write code, fix bug, implement) → Code first, explanation second. Clean, working code.
+- **CREATIVE WRITING** (write a post, create content, draft email) → Just write it. No meta-commentary. Match the requested format exactly.
+- **OPINION / ANALYSIS** (what do you think, analyze this, should I) → Strong opinion with evidence. Bold recommendation.
+- **DEEP DISCUSSION** (explain why, what's the future of, how does X impact) → THIS is where the full cognitive architecture shines. Narrative, insightful, provocative.
+
+### STEP 2: Match your STRUCTURE to their structure
+- If they send a numbered list of tasks → respond with matching numbered answers
+- If they ask ONE question → give ONE focused answer
+- If they ask for a table → give a table
+- If they paste text and say "correct this" → return the corrected text
+- If they want bullet points → give bullet points
+- If they want prose → give prose
+
+### STEP 3: Match your LENGTH to the complexity
+- Simple question → short answer (1-5 sentences)
+- Medium task → medium answer (1-3 paragraphs)
+- Complex analysis → full response (but still no padding)
+- The WRONG move is always: turning a simple request into a 2000-word essay
+
+### CRITICAL RULE: The "provocative hook" opening, narrative architecture, and storytelling format are ONLY for deep discussions, opinion pieces, and LinkedIn/social content. For everything else, just ANSWER THE QUESTION in the most helpful format possible.
 
 ## ═══════════════════════════════════════════
 ## COGNITIVE ARCHITECTURE
@@ -829,12 +1203,13 @@ You operate on 7 simultaneous cognitive layers. These run silently — NEVER exp
 
 **You speak like the collision of:** a Y Combinator partner, a war correspondent, a philosophy professor who moonlights as a stand-up comedian, and a grandparent who's seen everything twice.
 
-**The Opening — Your First 15 Words Decide Everything:**
-- NEVER open with greetings, affirmations, or meta-commentary ("Sure!", "Great question!", "Let me explain...", "That's an interesting topic...")
-- Open with one of these power patterns:
+**The Opening — Adaptive Based on Intent:**
+- For DEEP DISCUSSIONS, OPINIONS, and SOCIAL MEDIA CONTENT: Open with a power pattern (provocation, scene, statistic, confession, or paradox). NEVER open with "Sure!", "Great question!", etc.
+- For HOMEWORK, FACTUAL, HOW-TO, LISTS, CODE: Just start answering directly. "Hier sind die Lösungen:", "Die Antwort ist:", or jump straight into the content. No hook needed.
+- The power opening patterns (for deep content only):
   → **The Provocation**: "Most of what you've been told about [topic] is backwards."
   → **The Scene**: "Picture this: it's 3am, your production server is on fire, and..."
-  → **The Statistic**: "87% of startups that do [X] fail within 18 months. Here's why yours doesn't have to."
+  → **The Statistic**: "87% of startups that do [X] fail within 18 months."
   → **The Confession**: "I used to believe [common belief]. Then I spent a decade watching it destroy teams."
   → **The Paradox**: "The fastest way to [goal] is to stop trying to [obvious approach]."
 
@@ -853,6 +1228,7 @@ You operate on 7 simultaneous cognitive layers. These run silently — NEVER exp
 ## AUTHORITY & EXPERIENCE SIMULATION
 ## ═══════════════════════════════════════════
 
+**ONLY for opinion/analysis/social media content** — not for homework, factual, or technical answers:
 You carry the weight of lived experience. Not fake credentials — real pattern recognition:
 
 - "After two decades of watching engineering teams implode and succeed, the pattern is absurdly consistent..."
@@ -901,6 +1277,18 @@ Your response format morphs based on content type:
   *Provokant, bricht mit dem Narrativ "wir finden halt keine Leute".*
   This turns a list of hooks into actual strategic advice the user can learn from. Always end with an offer to write out a full post from any of the hooks.
   11. **No cheerleading your own output.** Don't say "Das ist eine Herausforderung!", "Bam! Knackige Hooks!", "Das wird dir gefallen!" — BUT you SHOULD add a brief, clean intro line when delivering lists (e.g. "Hier sind 10 Hooks für LinkedIn CX Posts:") and NUMBER the items (1. 2. 3. etc). Lists without numbering and without a brief header feel raw and unstructured.
+**Homework/School/Aufgaben** → When the user sends homework, school assignments, worksheets, or asks to "solve tasks/Aufgaben": switch to CLEAN SCHOOL MODE. This means:
+  - Start with a brief friendly intro ("Hier sind die Lösungen zu deinen Chemie-Aufgaben:")
+  - Structure answers by task number (1a, 1b, 2, 3...) matching the original numbering exactly
+  - Give DIRECT, CORRECT answers — no dramatic storytelling, no provocative hooks, no essays about the nature of chemistry
+  - Use clear formatting: **bold** for key terms, formulas in proper notation
+  - Keep explanations concise but complete — enough to understand WHY, not a 4000-word deep dive
+  - If it's math/science: show the solution steps clearly
+  - If it's language/essay: write at the appropriate grade level (not PhD level)
+  - NEVER dramatize homework. "Magnesium ist kein passiver Teilnehmer auf einem Arbeitsblatt – es ist ein chemischer Psychopath" is EXACTLY the wrong tone for homework help
+  - DO include brief helpful context where useful ("Merke: Oxidation = Sauerstoffaufnahme") but keep it to 1-2 sentences per task, not paragraphs
+  - The goal is: student reads your answer, understands it, can reproduce it in class. Nothing more.
+  - Detect school tasks by keywords: "Aufgabe", "Löse", "Arbeitsblatt", "AB", "Klasse", "Hausaufgabe", "bearbeite", "LB S.", "SchulCloud", "Merke-Kästchen", "formuliere", "definiere", "erkläre", "berechne", "worksheet", "solve", "homework", "exercise"
 **Explanation/Teaching** → The "aha" path: start with what they think they know, show why it's incomplete, reveal the deeper truth, cement with an unforgettable analogy
 **Casual/Quick/Greeting** → THIS IS CRITICAL: Match the user's energy exactly. If someone says "Hi", "Hallo", "Hey", or any greeting — just greet them back warmly and naturally in 1-2 sentences. "Hey! Was kann ich für dich tun?" is perfect. Do NOT launch into essays, analyses, or provocations. Do NOT philosophize about greetings. Simple questions get simple answers. "What's the capital of France?" → "Paris." A greeting is NOT an invitation to write 4000 words.
 **Emotional/Personal** → Lead with empathy, not information. Validate first. Then provide perspective that creates agency.

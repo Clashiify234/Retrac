@@ -7,16 +7,28 @@ const RetracAPI = {
     baseUrl: window.location.origin,
 
     // Send chat message with streaming
+    currentAbortController: null,
+
+    abortStream() {
+        if (this.currentAbortController) {
+            this.currentAbortController.abort();
+            this.currentAbortController = null;
+        }
+    },
+
     async streamChat({ model, messages, onThinking, onText, onError, onDone, onActivity, onSources }) {
         const searchWeb = RetracSettings.get('searchWeb') || false;
         const deepResearch = RetracSettings.get('deepResearch') || false;
         const handwriting = RetracSettings.get('handwriting') || false;
 
+        this.currentAbortController = new AbortController();
+
         try {
             const response = await fetch(this.baseUrl + '/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ model, messages, searchWeb, deepResearch, handwriting })
+                body: JSON.stringify({ model, messages, searchWeb, deepResearch, handwriting }),
+                signal: this.currentAbortController.signal
             });
 
             if (!response.ok) {
@@ -66,6 +78,10 @@ const RetracAPI = {
             }
             onDone();
         } catch (err) {
+            if (err.name === 'AbortError') {
+                onDone();
+                return;
+            }
             onError('Connection error: ' + err.message + '. Make sure the server is running (npm start).');
         }
     },

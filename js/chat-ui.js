@@ -124,6 +124,7 @@ const RetracChatUI = {
         // Create assistant message container
         const assistantEl = this.createAssistantMessageEl();
         this.isStreaming = true;
+        this.updateSendButton(true);
         let fullResponse = '';
         let activities = [];
         let sources = [];
@@ -149,6 +150,7 @@ const RetracChatUI = {
             onError: (error) => {
                 this.showErrorInMessage(assistantEl, error);
                 this.isStreaming = false;
+                this.updateSendButton(false);
             },
             onDone: () => {
                 if (fullResponse) {
@@ -158,6 +160,7 @@ const RetracChatUI = {
                     this.finalizeAssistantMessage(assistantEl, fullResponse, activities, sources, thinkingDuration);
                 }
                 this.isStreaming = false;
+                this.updateSendButton(false);
                 this.updateSidebarHistory();
             }
         });
@@ -569,7 +572,12 @@ const RetracChatUI = {
             'Claude Haiku 4.5': '<img src="https://raw.githubusercontent.com/lobehub/lobe-icons/refs/heads/master/packages/static-png/dark/claude-color.png" width="18" height="18" />',
             'Gemini 3 Pro': '<img src="https://raw.githubusercontent.com/lobehub/lobe-icons/refs/heads/master/packages/static-png/dark/gemini-color.png" width="18" height="18" />',
             'GPT-5.1': '<img src="https://img.icons8.com/ios11/512/FFFFFF/chatgpt.png" width="18" height="18" />',
-            'GPT-5.2': '<img src="https://img.icons8.com/ios11/512/FFFFFF/chatgpt.png" width="18" height="18" />'
+            'GPT-5.2': '<img src="https://img.icons8.com/ios11/512/FFFFFF/chatgpt.png" width="18" height="18" />',
+            'Smart Ensemble': '<div style="width:18px;height:18px;border-radius:4px;background:linear-gradient(135deg,#6366f1,#a855f7);display:flex;align-items:center;justify-content:center"><svg width="10" height="10" viewBox="0 0 24 24" fill="white"><path d="M12 2L15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2z"/></svg></div>',
+            'Qwen 3 14B': '<img src="https://raw.githubusercontent.com/lobehub/lobe-icons/refs/heads/master/packages/static-png/dark/qwen-color.png" width="18" height="18" />',
+            'Mistral 7B': '<img src="https://raw.githubusercontent.com/lobehub/lobe-icons/refs/heads/master/packages/static-png/dark/mistral-color.png" width="18" height="18" />',
+            'GLM-4 9B': '<img src="https://raw.githubusercontent.com/lobehub/lobe-icons/refs/heads/master/packages/static-png/dark/chatglm-color.png" width="18" height="18" />',
+            'Phi-3 14B': '<img src="https://units.arma3.com/groups/img/192824/6d47O5TSnM.png" width="18" height="18" />'
         };
         return icons[model] || '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="1.8"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v4"></path><path d="M12 18v4"></path></svg>';
     },
@@ -578,6 +586,20 @@ const RetracChatUI = {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    },
+
+    updateSendButton(isStreaming) {
+        const btn = document.getElementById('send-btn');
+        if (!btn) return;
+        if (isStreaming) {
+            btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="black" stroke="none"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>`;
+            btn.title = 'Stop generating';
+            btn.classList.add('streaming');
+        } else {
+            btn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>`;
+            btn.title = 'Send message';
+            btn.classList.remove('streaming');
+        }
     },
 
     scrollToBottom() {
