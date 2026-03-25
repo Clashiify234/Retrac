@@ -15,6 +15,47 @@ const API_KEYS = {
     google: process.env.GOOGLE_API_KEY || ''
 };
 
+// ============ Ollama Config ============
+// OLLAMA_URL: Set this to your Cloudflare Tunnel URL when deploying to Render
+// e.g. OLLAMA_URL=https://ollama.yourdomain.com
+// Leave empty or localhost for local development
+const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
+let ollamaAvailable = null; // null = unknown, true/false = cached result
+let ollamaLastCheck = 0;
+const OLLAMA_CHECK_INTERVAL = 30000; // re-check every 30s
+
+async function isOllamaAvailable() {
+    const now = Date.now();
+    if (ollamaAvailable !== null && (now - ollamaLastCheck) < OLLAMA_CHECK_INTERVAL) {
+        return ollamaAvailable;
+    }
+    try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 3000);
+        const res = await fetch(OLLAMA_URL + '/api/tags', { signal: controller.signal });
+        clearTimeout(timeout);
+        ollamaAvailable = res.ok;
+    } catch {
+        ollamaAvailable = false;
+    }
+    ollamaLastCheck = now;
+    return ollamaAvailable;
+}
+
+// API endpoint to check Ollama status (used by frontend)
+app.get('/api/ollama-status', async (req, res) => {
+    const available = await isOllamaAvailable();
+    let models = [];
+    if (available) {
+        try {
+            const r = await fetch(OLLAMA_URL + '/api/tags');
+            const data = await r.json();
+            models = (data.models || []).map(m => m.name);
+        } catch {}
+    }
+    res.json({ available, url: OLLAMA_URL, models });
+});
+
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static(__dirname));
@@ -874,69 +915,56 @@ async function streamOllama(res, messages, modelName, searchWeb, deepResearch, h
 
     res.write(`data: ${JSON.stringify({ type: 'thinking', content: `Processing with ${modelName} (local)...` })}\n\n`);
 
-    return new Promise((resolve, reject) => {
-        const postData = JSON.stringify({
-            model: modelId,
-            messages: ollamaMessages,
-            stream: true
-        });
-
-        const req = http.request({
-            hostname: 'localhost',
-            port: 11434,
-            path: '/api/chat',
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Content-Length': Buffer.byteLength(postData)
-            }
-        }, (ollamaRes) => {
-            let buffer = '';
-            let totalTokens = 0;
-
-            ollamaRes.on('data', (chunk) => {
-                buffer += chunk.toString();
-                const lines = buffer.split('\n');
-                buffer = lines.pop();
-
-                for (const line of lines) {
-                    if (!line.trim()) continue;
-                    try {
-                        const json = JSON.parse(line);
-                        if (json.message && json.message.content) {
-                            res.write(`data: ${JSON.stringify({ type: 'text', content: json.message.content })}\n\n`);
-                        }
-                        if (json.done) {
-                            totalTokens = (json.prompt_eval_count || 0) + (json.eval_count || 0);
-                            logUsage({
-                                provider: 'ollama',
-                                model: modelId,
-                                modelDisplay: modelName,
-                                type: 'chat',
-                                inputTokens: json.prompt_eval_count || 0,
-                                outputTokens: json.eval_count || 0,
-                                cost: 0,
-                                duration: Date.now() - startTime
-                            });
-                        }
-                    } catch (e) { /* skip malformed lines */ }
-                }
-            });
-
-            ollamaRes.on('end', () => {
-                res.write('data: [DONE]\n\n');
-                res.end();
-                resolve();
-            });
-        });
-
-        req.on('error', (err) => {
-            reject(new Error(`Ollama not running. Start Ollama first. (${err.message})`));
-        });
-
-        req.write(postData);
-        req.end();
+    const ollamaRes = await fetch(`${OLLAMA_URL}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: modelId, messages: ollamaMessages, stream: true })
     });
+
+    if (!ollamaRes.ok) throw new Error(`Ollama error: ${ollamaRes.status}`);
+
+    const reader = ollamaRes.body.getReader ? ollamaRes.body.getReader() : null;
+    if (reader) {
+        const decoder = new TextDecoder();
+        let buffer = '';
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop();
+            for (const line of lines) {
+                if (!line.trim()) continue;
+                try {
+                    const json = JSON.parse(line);
+                    if (json.message?.content) {
+                        res.write(`data: ${JSON.stringify({ type: 'text', content: json.message.content })}\n\n`);
+                    }
+                    if (json.done) {
+                        logUsage({
+                            provider: 'ollama', model: modelId, modelDisplay: modelName, type: 'chat',
+                            inputTokens: json.prompt_eval_count || 0, outputTokens: json.eval_count || 0,
+                            cost: 0, duration: Date.now() - startTime
+                        });
+                    }
+                } catch {}
+            }
+        }
+    } else {
+        // Fallback for Node < 18 ReadableStream
+        const text = await ollamaRes.text();
+        for (const line of text.split('\n')) {
+            if (!line.trim()) continue;
+            try {
+                const json = JSON.parse(line);
+                if (json.message?.content) {
+                    res.write(`data: ${JSON.stringify({ type: 'text', content: json.message.content })}\n\n`);
+                }
+            } catch {}
+        }
+    }
+    res.write('data: [DONE]\n\n');
+    res.end();
 }
 
 // ============ Smart Ensemble (Multi-Model) Streaming ============
@@ -958,7 +986,7 @@ async function streamEnsemble(res, messages, searchWeb, deepResearch, handwritin
 
     let categories = ['general', 'creative', 'analysis']; // default
     try {
-        const routerRes = await fetch('http://localhost:11434/api/generate', {
+        const routerRes = await fetch(`${OLLAMA_URL}/api/generate`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -1012,7 +1040,7 @@ async function streamEnsemble(res, messages, searchWeb, deepResearch, handwritin
         res.write(`data: ${JSON.stringify({ type: 'activity', activity: 'evaluate', content: `Querying ${name}...` })}\n\n`);
 
         try {
-            const ollamaRes = await fetch('http://localhost:11434/api/chat', {
+            const ollamaRes = await fetch(`${OLLAMA_URL}/api/chat`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -1070,60 +1098,55 @@ ${validResponses.map((r, i) => `--- ANSWER FROM ${r.model} ---\n${r.response}\n`
 Now write the FINAL combined answer:`;
 
     // Stream the judge's response
-    return new Promise((resolve, reject) => {
-        const postData = JSON.stringify({
-            model: 'qwen3:14b',
-            messages: [{ role: 'user', content: judgePrompt }],
-            stream: true
-        });
-
-        const req = http.request({
-            hostname: 'localhost',
-            port: 11434,
-            path: '/api/chat',
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Content-Length': Buffer.byteLength(postData)
-            }
-        }, (ollamaRes) => {
-            let buffer = '';
-            ollamaRes.on('data', (chunk) => {
-                buffer += chunk.toString();
-                const lines = buffer.split('\n');
-                buffer = lines.pop();
-                for (const line of lines) {
-                    if (!line.trim()) continue;
-                    try {
-                        const json = JSON.parse(line);
-                        if (json.message && json.message.content) {
-                            res.write(`data: ${JSON.stringify({ type: 'text', content: json.message.content })}\n\n`);
-                        }
-                        if (json.done) {
-                            logUsage({
-                                provider: 'ollama',
-                                model: 'ensemble',
-                                modelDisplay: 'Smart Ensemble',
-                                type: 'chat',
-                                inputTokens: json.prompt_eval_count || 0,
-                                outputTokens: json.eval_count || 0,
-                                cost: 0,
-                                duration: Date.now() - startTime
-                            });
-                        }
-                    } catch (e) { /* skip malformed lines */ }
-                }
-            });
-            ollamaRes.on('end', () => {
-                res.write('data: [DONE]\n\n');
-                res.end();
-                resolve();
-            });
-        });
-        req.on('error', (err) => reject(new Error(`Ollama error: ${err.message}`)));
-        req.write(postData);
-        req.end();
+    const judgeRes = await fetch(`${OLLAMA_URL}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: 'qwen3:14b', messages: [{ role: 'user', content: judgePrompt }], stream: true })
     });
+
+    if (!judgeRes.ok) throw new Error(`Ollama judge error: ${judgeRes.status}`);
+
+    const judgeReader = judgeRes.body.getReader ? judgeRes.body.getReader() : null;
+    if (judgeReader) {
+        const decoder = new TextDecoder();
+        let buffer = '';
+        while (true) {
+            const { done, value } = await judgeReader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop();
+            for (const line of lines) {
+                if (!line.trim()) continue;
+                try {
+                    const json = JSON.parse(line);
+                    if (json.message?.content) {
+                        res.write(`data: ${JSON.stringify({ type: 'text', content: json.message.content })}\n\n`);
+                    }
+                    if (json.done) {
+                        logUsage({
+                            provider: 'ollama', model: 'ensemble', modelDisplay: 'Smart Ensemble', type: 'chat',
+                            inputTokens: json.prompt_eval_count || 0, outputTokens: json.eval_count || 0,
+                            cost: 0, duration: Date.now() - startTime
+                        });
+                    }
+                } catch {}
+            }
+        }
+    } else {
+        const text = await judgeRes.text();
+        for (const line of text.split('\n')) {
+            if (!line.trim()) continue;
+            try {
+                const json = JSON.parse(line);
+                if (json.message?.content) {
+                    res.write(`data: ${JSON.stringify({ type: 'text', content: json.message.content })}\n\n`);
+                }
+            } catch {}
+        }
+    }
+    res.write('data: [DONE]\n\n');
+    res.end();
 }
 
 // ============ System Prompt Builder ============

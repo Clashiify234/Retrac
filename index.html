@@ -525,7 +525,8 @@
                                         <span class="text-[#5a9ae6] text-[12px] italic ml-1">BETA</span>
                                     </button>
 
-                                    <!-- Separator: Local (Ollama) -->
+                                    <!-- Separator: Local (Ollama) - hidden until checked -->
+                                    <div id="ollama-models-section" style="display:none;">
                                     <div class="px-4 py-2 border-t border-[#333]">
                                         <span class="text-[11px] text-[#666] font-semibold uppercase tracking-wider">Local (Ollama)</span>
                                     </div>
@@ -562,6 +563,7 @@
                                         <span class="text-white text-[15px]">Phi-3 14B</span>
                                         <span class="text-[#22c55e] text-[12px] italic ml-1">LOCAL</span>
                                     </button>
+                                    </div><!-- end ollama-models-section -->
                                 </div>
 
                                 <!-- Ask for a model -->
@@ -2065,6 +2067,14 @@
         if (chatIdParam) {
             sessionStorage.setItem('retrac_current_chat_id', chatIdParam);
         }
+
+        // Check if Ollama is available and show/hide local models
+        fetch('/api/ollama-status').then(r => r.json()).then(data => {
+            const section = document.getElementById('ollama-models-section');
+            if (section && data.available) {
+                section.style.display = 'block';
+            }
+        }).catch(() => {});
 
         // Initialize chat UI
         const chatInput = document.getElementById('chat-input');
