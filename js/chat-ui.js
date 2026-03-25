@@ -171,11 +171,14 @@ const RetracChatUI = {
         if (!this.chatContainer || !this.currentChat) return;
         this.chatContainer.innerHTML = '';
 
+        // Use the chat-level model as fallback for messages without a model
+        const chatModel = this.currentChat.model;
+
         for (const msg of this.currentChat.messages) {
             if (msg.role === 'user') {
                 this.renderUserMessage(msg.content);
             } else {
-                const el = this.createAssistantMessageEl(msg.model);
+                const el = this.createAssistantMessageEl(msg.model || chatModel);
                 this.finalizeAssistantMessage(el, msg.content);
             }
         }

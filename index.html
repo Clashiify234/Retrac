@@ -2131,15 +2131,18 @@
         const _origAddMessage = RetracChatHistory.addMessage.bind(RetracChatHistory);
         const _origCreateNew = RetracChatHistory.createNew.bind(RetracChatHistory);
 
-        RetracChatHistory.addMessage = function(chatId, role, content) {
+        RetracChatHistory.addMessage = function(chatId, role, content, model) {
             if (incognitoMode) {
                 // Still track in-memory for the current session, but don't persist
                 if (RetracChatUI.currentChat) {
-                    RetracChatUI.currentChat.messages.push({ role, content, timestamp: Date.now() });
+                    const msg = { role, content, timestamp: Date.now() };
+                    if (model) msg.model = model;
+                    RetracChatUI.currentChat.messages.push(msg);
+                    if (role === 'assistant' && model) RetracChatUI.currentChat.model = model;
                 }
                 return RetracChatUI.currentChat;
             }
-            return _origAddMessage(chatId, role, content);
+            return _origAddMessage(chatId, role, content, model);
         };
 
         RetracChatHistory.createNew = function(title) {

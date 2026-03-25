@@ -592,5 +592,27 @@
     "outputTokens": 0,
     "cost": 0.04,
     "duration": 8193
+  },
+  {
+    "timestamp": 1774465868077,
+    "provider": "anthropic",
+    "model": "claude-haiku-4-5-20251001",
+    "modelDisplay": "Claude Haiku 4.5",
+    "type": "deep-research",
+    "inputTokens": 6254,
+    "outputTokens": 14,
+    "cost": 0.0050592,
+    "duration": 3246
+  },
+  {
+    "timestamp": 1774465884340,
+    "provider": "google",
+    "model": "gemini-3-pro-preview",
+    "modelDisplay": "Gemini 3 Pro",
+    "type": "deep-research",
+    "inputTokens": 5912,
+    "outputTokens": 9,
+    "cost": 0.011932,
+    "duration": 11361
   }
 ]
