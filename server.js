@@ -20,9 +20,11 @@ const API_KEYS = {
 // e.g. OLLAMA_URL=https://ollama.yourdomain.com
 // Leave empty or localhost for local development
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
+const IS_REMOTE_OLLAMA = OLLAMA_URL !== 'http://localhost:11434';
 let ollamaAvailable = null; // null = unknown, true/false = cached result
 let ollamaLastCheck = 0;
-const OLLAMA_CHECK_INTERVAL = 30000; // re-check every 30s
+const OLLAMA_CHECK_INTERVAL = IS_REMOTE_OLLAMA ? 60000 : 30000; // remote tunnels: check less often
+const OLLAMA_TIMEOUT = IS_REMOTE_OLLAMA ? 10000 : 3000; // remote tunnels: longer timeout
 
 async function isOllamaAvailable() {
     const now = Date.now();
@@ -31,12 +33,14 @@ async function isOllamaAvailable() {
     }
     try {
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 3000);
+        const timeout = setTimeout(() => controller.abort(), OLLAMA_TIMEOUT);
         const res = await fetch(OLLAMA_URL + '/api/tags', { signal: controller.signal });
         clearTimeout(timeout);
         ollamaAvailable = res.ok;
-    } catch {
+        if (IS_REMOTE_OLLAMA) console.log(`[Ollama] Remote tunnel check: ${ollamaAvailable ? 'connected' : 'unreachable'} (${OLLAMA_URL})`);
+    } catch (err) {
         ollamaAvailable = false;
+        if (IS_REMOTE_OLLAMA) console.log(`[Ollama] Remote tunnel unreachable: ${err.message}`);
     }
     ollamaLastCheck = now;
     return ollamaAvailable;
@@ -48,12 +52,15 @@ app.get('/api/ollama-status', async (req, res) => {
     let models = [];
     if (available) {
         try {
-            const r = await fetch(OLLAMA_URL + '/api/tags');
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), OLLAMA_TIMEOUT);
+            const r = await fetch(OLLAMA_URL + '/api/tags', { signal: controller.signal });
+            clearTimeout(timeout);
             const data = await r.json();
             models = (data.models || []).map(m => m.name);
         } catch {}
     }
-    res.json({ available, url: OLLAMA_URL, models });
+    res.json({ available, url: IS_REMOTE_OLLAMA ? '(remote tunnel)' : OLLAMA_URL, models });
 });
 
 app.use(cors());
@@ -915,13 +922,25 @@ async function streamOllama(res, messages, modelName, searchWeb, deepResearch, h
         }))
     ];
 
-    res.write(`data: ${JSON.stringify({ type: 'thinking', content: `Processing with ${modelName} (local)...` })}\n\n`);
+    res.write(`data: ${JSON.stringify({ type: 'thinking', content: `Processing with ${modelName}${IS_REMOTE_OLLAMA ? ' (remote)' : ' (local)'}...` })}\n\n`);
 
-    const ollamaRes = await fetch(`${OLLAMA_URL}/api/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: modelId, messages: ollamaMessages, stream: true })
-    });
+    // Retry logic for remote tunnel connections
+    let ollamaRes;
+    const maxRetries = IS_REMOTE_OLLAMA ? 2 : 0;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+            ollamaRes = await fetch(`${OLLAMA_URL}/api/chat`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ model: modelId, messages: ollamaMessages, stream: true })
+            });
+            break;
+        } catch (err) {
+            if (attempt === maxRetries) throw new Error(`Ollama tunnel unreachable after ${maxRetries + 1} attempts: ${err.message}`);
+            if (IS_REMOTE_OLLAMA) console.log(`[Ollama] Retry ${attempt + 1}/${maxRetries} for ${modelName}...`);
+            await new Promise(r => setTimeout(r, 1000));
+        }
+    }
 
     if (!ollamaRes.ok) throw new Error(`Ollama error: ${ollamaRes.status}`);
 
