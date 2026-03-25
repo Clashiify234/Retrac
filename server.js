@@ -19,6 +19,192 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static(__dirname));
 
+// ============ Usage Logging System ============
+
+const USAGE_LOG_PATH = path.join(__dirname, 'usage-log.json');
+const MAX_LOG_ENTRIES = 10000;
+
+const COST_RATES = {
+    'gemini-2.5-flash': { input: 0.15, output: 0.60 },
+    'gemini-2.5-pro': { input: 1.25, output: 10.00 },
+    'gemini-3-pro-preview': { input: 2.00, output: 12.00 },
+    'claude-opus-4-20250514': { input: 15.00, output: 75.00 },
+    'claude-sonnet-4-5-20250929': { input: 3.00, output: 15.00 },
+    'claude-sonnet-4-20250514': { input: 3.00, output: 15.00 },
+    'claude-haiku-4-5-20251001': { input: 0.80, output: 4.00 },
+    'gpt-4o': { input: 2.50, output: 10.00 },
+    'gpt-4.1': { input: 2.00, output: 8.00 }
+};
+
+function calculateCost(modelId, inputTokens, outputTokens) {
+    const rates = COST_RATES[modelId];
+    if (!rates) return 0;
+    return (inputTokens / 1_000_000) * rates.input + (outputTokens / 1_000_000) * rates.output;
+}
+
+function logUsage(data) {
+    // Fire and forget - don't slow down responses
+    setImmediate(() => {
+        try {
+            let logs = [];
+            if (fs.existsSync(USAGE_LOG_PATH)) {
+                try {
+                    const raw = fs.readFileSync(USAGE_LOG_PATH, 'utf-8');
+                    logs = JSON.parse(raw);
+                    if (!Array.isArray(logs)) logs = [];
+                } catch (e) {
+                    logs = [];
+                }
+            }
+            logs.push({
+                timestamp: Date.now(),
+                provider: data.provider || 'unknown',
+                model: data.model || 'unknown',
+                modelDisplay: data.modelDisplay || data.model || 'unknown',
+                type: data.type || 'chat',
+                inputTokens: data.inputTokens || 0,
+                outputTokens: data.outputTokens || 0,
+                cost: data.cost || 0,
+                duration: data.duration || 0
+            });
+            // Keep only last MAX_LOG_ENTRIES
+            if (logs.length > MAX_LOG_ENTRIES) {
+                logs = logs.slice(logs.length - MAX_LOG_ENTRIES);
+            }
+            fs.writeFileSync(USAGE_LOG_PATH, JSON.stringify(logs, null, 2));
+        } catch (e) {
+            console.error('Usage log write error:', e.message);
+        }
+    });
+}
+
+// ============ Usage Analytics Endpoint ============
+
+app.get('/api/usage', (req, res) => {
+    try {
+        let logs = [];
+        if (fs.existsSync(USAGE_LOG_PATH)) {
+            try {
+                const raw = fs.readFileSync(USAGE_LOG_PATH, 'utf-8');
+                logs = JSON.parse(raw);
+                if (!Array.isArray(logs)) logs = [];
+            } catch (e) {
+                logs = [];
+            }
+        }
+
+        const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+        const todayMs = todayStart.getTime();
+        const weekMs = todayMs - 6 * 24 * 60 * 60 * 1000;
+        const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
+        const monthMs = monthStart.getTime();
+
+        const total = { cost: 0, requests: 0, inputTokens: 0, outputTokens: 0 };
+        const today = { cost: 0, requests: 0, inputTokens: 0, outputTokens: 0 };
+        const thisWeek = { cost: 0, requests: 0 };
+        const thisMonth = { cost: 0, requests: 0 };
+        const byModel = {};
+        const byType = {};
+        const byDayMap = {};
+        const byHourMap = {};
+
+        for (const log of logs) {
+            const ts = log.timestamp || 0;
+            const cost = log.cost || 0;
+            const inTok = log.inputTokens || 0;
+            const outTok = log.outputTokens || 0;
+
+            // Total
+            total.cost += cost;
+            total.requests++;
+            total.inputTokens += inTok;
+            total.outputTokens += outTok;
+
+            // Today
+            if (ts >= todayMs) {
+                today.cost += cost;
+                today.requests++;
+                today.inputTokens += inTok;
+                today.outputTokens += outTok;
+
+                // Hourly breakdown for today
+                const hour = new Date(ts).getHours();
+                const hourKey = String(hour).padStart(2, '0') + ':00';
+                if (!byHourMap[hourKey]) byHourMap[hourKey] = { hour: hourKey, cost: 0, requests: 0 };
+                byHourMap[hourKey].cost += cost;
+                byHourMap[hourKey].requests++;
+            }
+
+            // This week
+            if (ts >= weekMs) {
+                thisWeek.cost += cost;
+                thisWeek.requests++;
+            }
+
+            // This month
+            if (ts >= monthMs) {
+                thisMonth.cost += cost;
+                thisMonth.requests++;
+            }
+
+            // By model
+            const modelKey = log.modelDisplay || log.model || 'Unknown';
+            if (!byModel[modelKey]) byModel[modelKey] = { cost: 0, requests: 0, inputTokens: 0, outputTokens: 0 };
+            byModel[modelKey].cost += cost;
+            byModel[modelKey].requests++;
+            byModel[modelKey].inputTokens += inTok;
+            byModel[modelKey].outputTokens += outTok;
+
+            // By type
+            const typeKey = log.type || 'chat';
+            if (!byType[typeKey]) byType[typeKey] = { cost: 0, requests: 0 };
+            byType[typeKey].cost += cost;
+            byType[typeKey].requests++;
+
+            // By day (last 30 days)
+            const thirtyDaysAgo = todayMs - 29 * 24 * 60 * 60 * 1000;
+            if (ts >= thirtyDaysAgo) {
+                const dayKey = new Date(ts).toISOString().split('T')[0];
+                if (!byDayMap[dayKey]) byDayMap[dayKey] = { date: dayKey, cost: 0, requests: 0 };
+                byDayMap[dayKey].cost += cost;
+                byDayMap[dayKey].requests++;
+            }
+        }
+
+        // Build byDay array with all 30 days filled
+        const byDay = [];
+        for (let i = 29; i >= 0; i--) {
+            const d = new Date(todayMs - i * 24 * 60 * 60 * 1000);
+            const key = d.toISOString().split('T')[0];
+            byDay.push(byDayMap[key] || { date: key, cost: 0, requests: 0 });
+        }
+
+        // Build byHour array for all 24 hours
+        const byHour = [];
+        for (let h = 0; h < 24; h++) {
+            const hourKey = String(h).padStart(2, '0') + ':00';
+            byHour.push(byHourMap[hourKey] || { hour: hourKey, cost: 0, requests: 0 });
+        }
+
+        const recentLogs = logs.slice(-50).reverse();
+
+        res.json({
+            total,
+            today,
+            thisWeek,
+            thisMonth,
+            byModel,
+            byType,
+            byDay,
+            byHour,
+            recentLogs
+        });
+    } catch (err) {
+        console.error('Usage API error:', err.message);
+        res.status(500).json({ error: 'Failed to read usage data.' });
+    }
+});
+
 // File upload storage
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
@@ -83,6 +269,7 @@ app.post('/api/chat', async (req, res) => {
 // ============ Claude (Anthropic) Streaming ============
 
 async function streamClaude(res, messages, apiKey, modelName, searchWeb, deepResearch, retryCount = 0) {
+    const startTime = Date.now();
     const Anthropic = require('@anthropic-ai/sdk');
     const client = new Anthropic({ apiKey });
 
@@ -172,74 +359,52 @@ Return ONLY the JSON object, no markdown.`,
 
                 // ====== PHASE 2: Multi-batch source gathering ======
                 if (deepResearch) {
-                    // Deep Research: 3 batches for 50-80+ sources total
-                    const batches = [
-                        { cats: ['academic', 'government', 'data'], label: 'Academic, government & statistical sources', count: '20-25' },
-                        { cats: ['news', 'industry', 'blogs'], label: 'News, industry & expert analysis', count: '20-25' },
-                        { cats: ['reference', 'forums', 'video'], label: 'Reference, community & multimedia sources', count: '15-20' }
-                    ];
+                    // Deep Research: 1 batch, 5 high-quality sources
+                    res.write(`data: ${JSON.stringify({ type: 'activity', activity: 'search', content: 'Searching for authoritative sources...' })}\n\n`);
+                    await sleep(300);
 
-                    for (const batch of batches) {
-                        res.write(`data: ${JSON.stringify({ type: 'activity', activity: 'search', content: `Searching: ${batch.label}` })}\n\n`);
-                        await sleep(300);
-
-                        const batchResponse = await client.messages.create({
-                            model: modelId,
-                            max_tokens: 3000,
-                            system: `You are a world-class research analyst. Return a JSON array of ${batch.count} real, authoritative sources for the given query.
-
-Focus on these source categories: ${batch.cats.join(', ')}
+                    const batchResponse = await client.messages.create({
+                        model: modelId,
+                        max_tokens: 1500,
+                        system: `You are a research analyst. Return a JSON array of exactly 5 real, authoritative, diverse sources for the given query. Mix academic, news, and industry sources.
 
 Each source must have:
 - "domain": website domain (e.g. "nature.com")
-- "url": a realistic URL with specific path relevant to the query
+- "url": a realistic URL with specific path
 - "title": what this page contains (specific, not generic)
-- "category": one of "${batch.cats.join('", "')}"
+- "category": one of "academic", "news", "government", "industry", "reference"
 
-Use REAL domains that actually exist. URLs should have realistic paths with article IDs, slugs, or specific sections — NOT the user's query text pasted into a URL.
+Use REAL domains. Return ONLY the raw JSON array.`,
+                        messages: [{ role: 'user', content: `Query: "${lastUserMsg}"` }]
+                    });
 
-Examples of good URLs:
-- "pubmed.ncbi.nlm.nih.gov/articles/PMC8234567"
-- "reuters.com/technology/ai-regulation-european-union-2024-03-15"
-- "ourworldindata.org/co2-emissions"
-- "stackoverflow.com/questions/12345678/how-to-sort-objects"
+                    sources = parseSourcesJSON(batchResponse.content[0]?.text || '[]');
 
-Return ONLY the raw JSON array.`,
-                            messages: [{ role: 'user', content: `Query: "${lastUserMsg}"` }]
-                        });
-
-                        const batchSources = parseSourcesJSON(batchResponse.content[0]?.text || '[]');
-
-                        // Show individual source visits
-                        for (const s of batchSources) {
-                            const shortUrl = s.url.replace('https://', '').replace('http://', '');
-                            const trimmedUrl = shortUrl.length > 60 ? shortUrl.slice(0, 60) + '...' : shortUrl;
-                            res.write(`data: ${JSON.stringify({ type: 'activity', activity: 'visit', content: `Reading ${trimmedUrl}` })}\n\n`);
-                            await sleep(120 + Math.random() * 180);
-                        }
-
-                        sources.push(...batchSources);
-
-                        res.write(`data: ${JSON.stringify({ type: 'activity', activity: 'evaluate', content: `Found ${batchSources.length} sources (${sources.length} total)` })}\n\n`);
-                        await sleep(300);
+                    for (const s of sources) {
+                        const shortUrl = s.url.replace('https://', '').replace('http://', '');
+                        const trimmedUrl = shortUrl.length > 60 ? shortUrl.slice(0, 60) + '...' : shortUrl;
+                        res.write(`data: ${JSON.stringify({ type: 'activity', activity: 'visit', content: `Reading ${trimmedUrl}` })}\n\n`);
+                        await sleep(200 + Math.random() * 300);
                     }
+
+                    res.write(`data: ${JSON.stringify({ type: 'activity', activity: 'evaluate', content: `Found ${sources.length} sources` })}\n\n`);
                 } else {
-                    // Normal Search Web: single batch, 10-15 sources
-                    res.write(`data: ${JSON.stringify({ type: 'activity', activity: 'search', content: `Searching the web...` })}\n\n`);
+                    // Normal Search Web: 5 sources
+                    res.write(`data: ${JSON.stringify({ type: 'activity', activity: 'search', content: 'Searching the web...' })}\n\n`);
                     await sleep(300);
 
                     const sourceResponse = await client.messages.create({
                         model: modelId,
-                        max_tokens: 2048,
-                        system: `You are a research assistant. Return a JSON array of 10-15 real, authoritative sources for the given query.
+                        max_tokens: 1500,
+                        system: `You are a research assistant. Return a JSON array of exactly 5 real, authoritative sources for the given query.
 
 Each source must have:
 - "domain": website domain
-- "url": a realistic URL with specific path (NOT the query pasted into a URL path)
+- "url": a realistic URL with specific path
 - "title": what this page contains
-- "category": one of "academic", "news", "government", "industry", "reference", "data"
+- "category": one of "academic", "news", "government", "industry", "reference"
 
-Use REAL domains. URLs should have realistic paths. Return ONLY the raw JSON array.`,
+Use REAL domains. Return ONLY the raw JSON array.`,
                         messages: [{ role: 'user', content: `Query: "${lastUserMsg}"` }]
                     });
 
@@ -296,6 +461,27 @@ Use REAL domains. URLs should have realistic paths. Return ONLY the raw JSON arr
             }
         }
 
+        // Log usage after streaming completes
+        try {
+            const finalMessage = await stream.finalMessage();
+            const usage = finalMessage.usage || {};
+            const inputTokens = usage.input_tokens || 0;
+            const outputTokens = usage.output_tokens || 0;
+            const chatType = deepResearch ? 'deep-research' : (searchWeb ? 'search' : 'chat');
+            logUsage({
+                provider: 'anthropic',
+                model: modelId,
+                modelDisplay: modelName || 'Claude',
+                type: chatType,
+                inputTokens,
+                outputTokens,
+                cost: calculateCost(modelId, inputTokens, outputTokens),
+                duration: Date.now() - startTime
+            });
+        } catch (e) {
+            console.error('Claude usage log error:', e.message);
+        }
+
         // Only send sources if search was active and we have them
         if (needsSearch && sources.length > 0) {
             res.write(`data: ${JSON.stringify({ type: 'sources', sources })}\n\n`);
@@ -320,6 +506,7 @@ Use REAL domains. URLs should have realistic paths. Return ONLY the raw JSON arr
 // ============ Gemini (Google) Streaming ============
 
 async function streamGemini(res, messages, apiKey, modelName, searchWeb, deepResearch) {
+    const startTime = Date.now();
     const { GoogleGenerativeAI } = require('@google/generative-ai');
     const genAI = new GoogleGenerativeAI(apiKey);
 
@@ -371,19 +558,28 @@ async function streamGemini(res, messages, apiKey, modelName, searchWeb, deepRes
         }
     }
 
-    // Extract real grounding sources from Google Search
-    if (useGrounding) {
-        try {
-            const response = await result.response;
+    // Extract usage metadata and log
+    let geminiInputTokens = 0, geminiOutputTokens = 0;
+    let hasGrounding = false;
+    try {
+        const response = await result.response;
+        const usageMeta = response.usageMetadata;
+        if (usageMeta) {
+            geminiInputTokens = usageMeta.promptTokenCount || 0;
+            geminiOutputTokens = usageMeta.candidatesTokenCount || 0;
+        }
+
+        // Extract real grounding sources from Google Search
+        if (useGrounding) {
             const metadata = response.candidates?.[0]?.groundingMetadata;
             if (metadata?.groundingChunks?.length > 0) {
+                hasGrounding = true;
                 const seen = new Set();
                 const sources = metadata.groundingChunks
                     .filter(chunk => chunk.web)
                     .map(chunk => {
                         const url = chunk.web.uri;
                         const title = chunk.web.title || '';
-                        // Google returns redirect URLs - use the title as domain (e.g. "coinmarketcap.com")
                         const domain = title.replace(/^www\./, '') || (() => { try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return ''; } })();
                         return { title: title || domain, url, domain, category: 'general' };
                     })
@@ -398,9 +594,36 @@ async function streamGemini(res, messages, apiKey, modelName, searchWeb, deepRes
                     res.write(`data: ${JSON.stringify({ type: 'sources', sources })}\n\n`);
                 }
             }
-        } catch (e) {
-            console.error('Grounding metadata error:', e.message);
         }
+    } catch (e) {
+        console.error('Gemini metadata error:', e.message);
+    }
+
+    // Log Gemini chat usage
+    const geminiChatType = deepResearch ? 'deep-research' : (searchWeb ? 'search' : 'chat');
+    logUsage({
+        provider: 'google',
+        model: modelId,
+        modelDisplay: modelName || 'Gemini',
+        type: geminiChatType,
+        inputTokens: geminiInputTokens,
+        outputTokens: geminiOutputTokens,
+        cost: calculateCost(modelId, geminiInputTokens, geminiOutputTokens),
+        duration: Date.now() - startTime
+    });
+
+    // Log additional grounding entry if Google Search was used
+    if (hasGrounding) {
+        logUsage({
+            provider: 'google',
+            model: modelId,
+            modelDisplay: 'Google Search',
+            type: 'grounding',
+            inputTokens: 0,
+            outputTokens: 0,
+            cost: 0.035,
+            duration: 0
+        });
     }
 
     res.write('data: [DONE]\n\n');
@@ -410,6 +633,7 @@ async function streamGemini(res, messages, apiKey, modelName, searchWeb, deepRes
 // ============ OpenAI (GPT) Streaming ============
 
 async function streamOpenAI(res, messages, apiKey, modelName, searchWeb, deepResearch) {
+    const startTime = Date.now();
     const OpenAI = require('openai');
     const client = new OpenAI({ apiKey });
 
@@ -433,15 +657,34 @@ async function streamOpenAI(res, messages, apiKey, modelName, searchWeb, deepRes
         model: modelId,
         messages: openaiMessages,
         max_tokens: 8192,
-        stream: true
+        stream: true,
+        stream_options: { include_usage: true }
     });
 
+    let openaiInputTokens = 0, openaiOutputTokens = 0;
     for await (const chunk of stream) {
-        const content = chunk.choices[0]?.delta?.content;
+        const content = chunk.choices?.[0]?.delta?.content;
         if (content) {
             res.write(`data: ${JSON.stringify({ type: 'text', content })}\n\n`);
         }
+        // OpenAI sends usage in the final chunk when stream_options.include_usage is true
+        if (chunk.usage) {
+            openaiInputTokens = chunk.usage.prompt_tokens || 0;
+            openaiOutputTokens = chunk.usage.completion_tokens || 0;
+        }
     }
+
+    // Log OpenAI usage
+    logUsage({
+        provider: 'openai',
+        model: modelId,
+        modelDisplay: modelName || 'GPT',
+        type: deepResearch ? 'deep-research' : (searchWeb ? 'search' : 'chat'),
+        inputTokens: openaiInputTokens,
+        outputTokens: openaiOutputTokens,
+        cost: calculateCost(modelId, openaiInputTokens, openaiOutputTokens),
+        duration: Date.now() - startTime
+    });
 
     res.write('data: [DONE]\n\n');
     res.end();
@@ -465,7 +708,7 @@ function buildSystemPrompt(searchWeb, deepResearch, needsSearch, sources) {
 ## COGNITIVE ARCHITECTURE
 ## ═══════════════════════════════════════════
 
-You operate on 7 simultaneous cognitive layers. These run silently — never expose the machinery, only the output:
+You operate on 7 simultaneous cognitive layers. These run silently — NEVER expose the machinery, NEVER use these layer names as headings in your output. Words like "Detonator", "Kartographie", "Ausgrabung", "Kollision", "Synthese", "Kristallisation" must NEVER appear in your response. These are INTERNAL processing steps only:
 
 **Layer 1: PHANTOM INTENT** — The user typed one thing but needs something else entirely. A question about "best programming language" is really about career anxiety. A question about "how to manage a team" is really about a specific person they can't handle. Detect the ghost question. Answer both.
 
@@ -590,6 +833,7 @@ These are HARD rules. Breaking any of them means the response has failed:
 9. **NO inventing constraints the user didn't mention.** If the user says "write hooks", don't add arbitrary limits like "140 characters" or "under 10 words" unless THEY specified it. Don't mention made-up constraints you're following. Just deliver the content.
 9. **NO corporate zombie language.** "Leverage", "synergize", "align stakeholders", "drive outcomes" — only if you're specifically deconstructing what they actually mean.
 10. **NO shy conclusions.** End with conviction. Your closing should hit like the last line of a great speech.
+10b. **Markdown rules:** Use **double asterisks** for bold (**text**), NOT single asterisks (*text*). Single asterisks render as italic, not bold. For section headers use ## markdown headers, NOT bold text as headers. NEVER use the internal cognitive layer names (Detonator, Kartographie, Synthese, Kristallisation, etc.) as section headers — those are internal processing only, never shown to the user.
 11. **NO over-delivering on simple inputs.** If the user sends a greeting ("Hi", "Hallo", "Hey"), respond with a friendly greeting — NOT an essay. If the user asks a one-line factual question, give a one-line answer. The depth rules ONLY apply when the question deserves depth.
 12. **NO generic content. EVER.** This is the most important rule for written content. If you catch yourself writing sentences like "In today's fast-paced world...", "Communication is key...", "It's important to stay authentic...", "The power of teamwork...", "Success doesn't happen overnight..." — STOP and rewrite. These are the hallmark of bad AI output. Every sentence must contain something SPECIFIC: a name, a number, a date, a place, a concrete scenario, or a surprising insight that the reader has genuinely never considered before. The test: if you delete a sentence and the post still makes sense, that sentence was filler and shouldn't exist.
 
@@ -729,7 +973,8 @@ app.post('/api/upload', upload.array('files', 20), (req, res) => {
 // ============ Image Generation Proxy (Nano Banana / Imagen via Google) ============
 
 app.post('/api/generate-image', async (req, res) => {
-    const { prompt, model, aspectRatio } = req.body;
+    const imgStartTime = Date.now();
+    const { prompt, model, aspectRatio, referenceImage } = req.body;
     if (!API_KEYS.google) {
         return res.status(400).json({ error: 'Image generation requires a Google API key.' });
     }
@@ -765,6 +1010,16 @@ app.post('/api/generate-image', async (req, res) => {
             const dir = path.join(__dirname, 'uploads');
             if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
             fs.writeFileSync(path.join(dir, filename), Buffer.from(imgData, 'base64'));
+            logUsage({
+                provider: 'google',
+                model: modelId,
+                modelDisplay: model || 'Imagen',
+                type: 'image',
+                inputTokens: 0,
+                outputTokens: 0,
+                cost: 0.04,
+                duration: Date.now() - imgStartTime
+            });
             res.json({ url: `/uploads/${filename}`, revised_prompt: prompt });
         } else {
             // Nano Banana models use generateContent with image response modality
@@ -775,7 +1030,19 @@ app.post('/api/generate-image', async (req, res) => {
                 generationConfig: { responseModalities: ['TEXT', 'IMAGE'] }
             });
 
-            const result = await genModel.generateContent(prompt);
+            // Build content parts - text + optional reference image
+            const contentParts = [{ text: prompt }];
+            if (referenceImage) {
+                // referenceImage is a URL path like /uploads/img-xxx.png - read the file
+                const refPath = path.join(__dirname, referenceImage);
+                if (fs.existsSync(refPath)) {
+                    const imgBuffer = fs.readFileSync(refPath);
+                    const ext = referenceImage.endsWith('.png') ? 'image/png' : 'image/jpeg';
+                    contentParts.unshift({ inlineData: { mimeType: ext, data: imgBuffer.toString('base64') } });
+                }
+            }
+
+            const result = await genModel.generateContent(contentParts);
             const response = result.response;
             const parts = response.candidates?.[0]?.content?.parts || [];
 
@@ -797,6 +1064,16 @@ app.post('/api/generate-image', async (req, res) => {
             const dir = path.join(__dirname, 'uploads');
             if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
             fs.writeFileSync(path.join(dir, filename), Buffer.from(imageData.data, 'base64'));
+            logUsage({
+                provider: 'google',
+                model: modelId,
+                modelDisplay: model || 'Nano Banana',
+                type: 'image',
+                inputTokens: 0,
+                outputTokens: 0,
+                cost: 0.04,
+                duration: Date.now() - imgStartTime
+            });
             res.json({ url: `/uploads/${filename}`, revised_prompt: revisedPrompt || prompt });
         }
     } catch (err) {
@@ -808,6 +1085,7 @@ app.post('/api/generate-image', async (req, res) => {
 // ============ Video Generation Endpoint ============
 
 app.post('/api/generate-video', async (req, res) => {
+    const vidStartTime = Date.now();
     const { prompt, model, aspectRatio, duration } = req.body;
     if (!API_KEYS.google) {
         return res.status(400).json({ error: 'Video generation requires a Google API key.' });
@@ -906,6 +1184,17 @@ app.post('/api/generate-video', async (req, res) => {
         const dir = path.join(__dirname, 'uploads');
         if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
         fs.writeFileSync(path.join(dir, filename), videoBuffer);
+
+        logUsage({
+            provider: 'google',
+            model: modelId,
+            modelDisplay: model || 'Veo',
+            type: 'video',
+            inputTokens: 0,
+            outputTokens: 0,
+            cost: 0.35,
+            duration: Date.now() - vidStartTime
+        });
 
         res.json({ url: `/uploads/${filename}` });
     } catch (err) {

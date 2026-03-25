@@ -83,11 +83,11 @@ const RetracAPI = {
     },
 
     // Generate image
-    async generateImage(prompt, model, aspectRatio) {
+    async generateImage(prompt, model, aspectRatio, referenceImage) {
         const res = await fetch(this.baseUrl + '/api/generate-image', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ prompt, model, aspectRatio })
+            body: JSON.stringify({ prompt, model, aspectRatio, referenceImage })
         });
         return res.json();
     },

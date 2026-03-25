@@ -1,0 +1,57 @@
+[
+  {
+    "timestamp": 1774383095315,
+    "provider": "google",
+    "model": "gemini-3-pro-preview",
+    "modelDisplay": "Gemini 3 Pro",
+    "type": "chat",
+    "inputTokens": 4260,
+    "outputTokens": 8,
+    "cost": 0.008616,
+    "duration": 6738
+  },
+  {
+    "timestamp": 1774383104094,
+    "provider": "anthropic",
+    "model": "claude-sonnet-4-5-20250929",
+    "modelDisplay": "Claude Sonnet 4.5",
+    "type": "chat",
+    "inputTokens": 4510,
+    "outputTokens": 23,
+    "cost": 0.013875,
+    "duration": 2657
+  },
+  {
+    "timestamp": 1774383121775,
+    "provider": "anthropic",
+    "model": "claude-sonnet-4-5-20250929",
+    "modelDisplay": "Claude Sonnet 4.5",
+    "type": "chat",
+    "inputTokens": 4510,
+    "outputTokens": 23,
+    "cost": 0.013875,
+    "duration": 2428
+  },
+  {
+    "timestamp": 1774383312903,
+    "provider": "google",
+    "model": "gemini-2.5-flash-image",
+    "modelDisplay": "Nano Banana",
+    "type": "image",
+    "inputTokens": 0,
+    "outputTokens": 0,
+    "cost": 0.04,
+    "duration": 6925
+  },
+  {
+    "timestamp": 1774385311726,
+    "provider": "google",
+    "model": "gemini-2.5-flash-image",
+    "modelDisplay": "Nano Banana",
+    "type": "image",
+    "inputTokens": 0,
+    "outputTokens": 0,
+    "cost": 0.04,
+    "duration": 6293
+  }
+]

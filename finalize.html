@@ -1,0 +1,1607 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="favicon.png" sizes="any">
+    <title>Finalize Post - Retrac AI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #000000;
+            display: flex;
+            height: 100vh;
+            margin: 0;
+            color: white;
+            overflow: hidden;
+        }
+
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #555; }
+
+        /* Sidebar collapse */
+        .sidebar-collapsed { width: 54px !important; padding: 12px 8px !important; align-items: center !important; }
+        .sidebar-collapsed .sidebar-hide { display: none !important; }
+        .sidebar-collapsed .sidebar-header { justify-content: center !important; margin-bottom: 16px !important; }
+        .sidebar-collapsed .sidebar-header > *:not(.sidebar-logo) { display: none !important; }
+        .sidebar-collapsed nav a { justify-content: center; padding: 8px; }
+        .sidebar-collapsed nav a span { display: none; }
+        .sidebar-collapsed nav a svg { margin: 0; }
+        .sidebar-collapsed #sidebar-auth { align-items: center; }
+        .sidebar-collapsed #sidebar-auth button { display: none; }
+        .sidebar-collapsed #sidebar-auth > div { justify-content: center; }
+        .sidebar-collapsed #sidebar-auth > div > div.flex-1 { display: none; }
+        .sidebar-collapsed #sidebar-auth .go-pro-card { display: none; }
+        aside { transition: width 0.2s ease; }
+
+        /* Canvas area */
+        .canvas-container {
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex: 1;
+            background: #1a1a1a;
+            border: 2px dashed #333;
+            border-radius: 12px;
+            overflow: hidden;
+            min-height: 0;
+        }
+
+        .canvas-container.has-image {
+            border-style: solid;
+            border-color: #2a2a2a;
+        }
+
+        .canvas-container.drag-over {
+            border-color: #6366f1;
+            background: rgba(99, 102, 241, 0.05);
+        }
+
+        /* Image wrapper for overlays */
+        .image-wrapper {
+            position: relative;
+            display: inline-block;
+            max-width: 100%;
+            max-height: 100%;
+        }
+
+        .image-wrapper img {
+            display: block;
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+
+        /* Text overlay */
+        .text-overlay {
+            position: absolute;
+            cursor: grab;
+            user-select: none;
+            white-space: pre-wrap;
+            z-index: 10;
+            transition: box-shadow 0.15s ease;
+        }
+
+        .text-overlay:active {
+            cursor: grabbing;
+        }
+
+        .text-overlay.selected {
+            box-shadow: 0 0 0 2px #6366f1;
+        }
+
+        .text-overlay-inner {
+            padding: 8px 16px;
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 8px;
+            color: #000;
+            font-weight: 700;
+            font-family: 'Inter', sans-serif;
+            font-size: 24px;
+            line-height: 1.3;
+        }
+
+        /* Drop zone placeholder */
+        .drop-placeholder {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            color: #666;
+            padding: 40px;
+            text-align: center;
+        }
+
+        .drop-placeholder svg {
+            opacity: 0.4;
+        }
+
+        /* Controls panel */
+        .controls-panel {
+            width: 40%;
+            min-width: 320px;
+            max-width: 480px;
+            background: #1e1e1e;
+            border-left: 1px solid #2a2a2a;
+            overflow-y: auto;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        .control-section {
+            background: #252525;
+            border: 1px solid #333;
+            border-radius: 12px;
+            padding: 20px;
+        }
+
+        .control-section h3 {
+            font-size: 14px;
+            font-weight: 600;
+            color: #e0e0e0;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: #6366f1;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+            font-family: 'Inter', sans-serif;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-primary:hover { background: #5558e6; }
+
+        .btn-secondary {
+            background: #333;
+            color: #e0e0e0;
+            border: 1px solid #444;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: 'Inter', sans-serif;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn-secondary:hover {
+            background: #3a3a3a;
+            border-color: #555;
+        }
+
+        .btn-danger {
+            background: transparent;
+            color: #f87171;
+            border: 1px solid #7f1d1d;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: 'Inter', sans-serif;
+        }
+
+        .btn-danger:hover {
+            background: rgba(248, 113, 113, 0.1);
+            border-color: #f87171;
+        }
+
+        /* Text overlay list item */
+        .overlay-item {
+            background: #2a2a2a;
+            border: 1px solid #383838;
+            border-radius: 8px;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            transition: border-color 0.15s;
+        }
+
+        .overlay-item.active {
+            border-color: #6366f1;
+        }
+
+        .overlay-item textarea.overlay-text {
+            background: #1e1e1e;
+            border: 1px solid #444;
+            border-radius: 6px;
+            color: #e0e0e0;
+            padding: 8px 12px;
+            font-size: 14px;
+            font-family: 'Inter', sans-serif;
+            width: 100%;
+            outline: none;
+            transition: border-color 0.15s;
+            resize: vertical;
+            min-height: 36px;
+            max-height: 120px;
+            line-height: 1.4;
+        }
+
+        .overlay-item textarea.overlay-text:focus {
+            border-color: #6366f1;
+        }
+
+        /* Range slider styling */
+        input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100%;
+            height: 6px;
+            background: #333;
+            border-radius: 3px;
+            outline: none;
+            cursor: pointer;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #6366f1;
+            cursor: pointer;
+            border: 2px solid #1a1a1a;
+        }
+
+        input[type="range"]::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #6366f1;
+            cursor: pointer;
+            border: 2px solid #1a1a1a;
+        }
+
+        .slider-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .slider-row label {
+            font-size: 12px;
+            color: #999;
+            min-width: 90px;
+            flex-shrink: 0;
+        }
+
+        .slider-row .slider-value {
+            font-size: 12px;
+            color: #888;
+            min-width: 36px;
+            text-align: right;
+        }
+
+        /* Watermark status */
+        .watermark-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 12px;
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .watermark-status.success {
+            background: rgba(34, 197, 94, 0.1);
+            color: #22c55e;
+            border: 1px solid rgba(34, 197, 94, 0.2);
+        }
+
+        .watermark-status.pending {
+            background: rgba(234, 179, 8, 0.1);
+            color: #eab308;
+            border: 1px solid rgba(234, 179, 8, 0.2);
+        }
+
+        /* Delete button on overlay item */
+        .delete-overlay-btn {
+            background: none;
+            border: none;
+            color: #666;
+            cursor: pointer;
+            padding: 4px;
+            border-radius: 4px;
+            transition: all 0.15s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .delete-overlay-btn:hover {
+            color: #f87171;
+            background: rgba(248, 113, 113, 0.1);
+        }
+
+        /* Custom popup overlay */
+        .popup-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        .popup-overlay.visible {
+            opacity: 1;
+        }
+
+        .popup-box {
+            background: #252525;
+            border: 1px solid #333;
+            border-radius: 16px;
+            padding: 28px;
+            max-width: 400px;
+            width: 90%;
+            text-align: center;
+            transform: scale(0.95);
+            transition: transform 0.2s;
+        }
+
+        .popup-overlay.visible .popup-box {
+            transform: scale(1);
+        }
+
+        .popup-box h3 {
+            color: #e0e0e0;
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .popup-box p {
+            color: #999;
+            font-size: 14px;
+            margin-bottom: 20px;
+        }
+
+        .popup-btn {
+            background: #6366f1;
+            color: white;
+            border: none;
+            padding: 10px 28px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            font-family: 'Inter', sans-serif;
+        }
+
+        .popup-btn:hover { background: #5558e6; }
+
+        /* No image state */
+        .no-image-hint {
+            color: #555;
+            font-size: 13px;
+            text-align: center;
+            padding: 12px;
+        }
+    </style>
+</head>
+<body class="antialiased">
+
+    <!-- Sidebar -->
+    <aside id="sidebar" class="w-[280px] h-full bg-[#171717] flex flex-col p-4 border-r border-[#2a2a2a] shrink-0">
+        <div class="sidebar-header flex items-center justify-between mb-8 px-1 mt-1">
+            <a href="index.html" class="sidebar-logo text-white hover:opacity-80 transition-opacity">
+                <img src="logo.png" width="32" height="32" alt="Retrac" class="w-8 h-8">
+            </a>
+            <div class="flex items-center gap-3 sidebar-hide">
+                <button class="text-[#a0a0a0] hover:text-white transition-colors">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><path d="M21 21l-4.3-4.3"></path></svg>
+                </button>
+                <button id="sidebar-toggle-btn" class="text-[#a0a0a0] bg-[#232323] border border-[#2e2e2e] p-1.5 rounded-lg hover:text-white hover:bg-[#252525] transition-colors">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3" ry="3"></rect><line x1="15" y1="3" x2="15" y2="21"></line></svg>
+                </button>
+            </div>
+        </div>
+
+        <nav class="flex flex-col gap-1.5 px-1">
+            <a href="apps.html" class="flex items-center gap-3.5 py-2 px-3 rounded-lg hover:bg-[#232323] transition-colors text-[#e0e0e0] hover:text-white">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="2"></rect><rect x="14" y="3" width="7" height="7" rx="2"></rect><rect x="14" y="14" width="7" height="7" rx="2"></rect><rect x="3" y="14" width="7" height="7" rx="2"></rect></svg>
+                <span class="text-[15px] font-medium">Apps</span>
+            </a>
+            <a href="imagine.html" class="flex items-center gap-3.5 py-2 px-3 rounded-lg hover:bg-[#232323] transition-colors text-[#e0e0e0] hover:text-white">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="6" width="15" height="13" rx="2"/><path d="M17 10l5-3v10l-5-3v-4z"/><circle cx="9.5" cy="12.5" r="2.5" stroke-width="1.5"/></svg>
+                <span class="text-[15px] font-medium">Imagine</span>
+            </a>
+            <a href="documents.html" class="flex items-center gap-3.5 py-2 px-3 rounded-lg hover:bg-[#232323] transition-colors text-[#e0e0e0] hover:text-white">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M 8 22 H 18 A 2 2 0 0 0 20 20 V 4 A 2 2 0 0 0 18 2 H 6 A 2 2 0 0 0 4 4 V 16 L 8 22 Z"></path><path d="M 4 16 H 6 A 2 2 0 0 1 8 18 V 22"></path><line x1="10" y1="10" x2="15" y2="10"></line><line x1="10" y1="14" x2="16" y2="14"></line></svg>
+                <span class="text-[15px] font-medium">Documents</span>
+            </a>
+            <a href="projects.html" class="flex items-center gap-3.5 py-2 px-3 rounded-lg hover:bg-[#232323] transition-colors text-[#e0e0e0] hover:text-white">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"></path><path d="M2 10h20"></path></svg>
+                <span class="text-[15px] font-medium">Projects</span>
+            </a>
+            <a href="presentations.html" class="flex items-center gap-3.5 py-2 px-3 rounded-lg hover:bg-[#232323] transition-colors text-[#e0e0e0] hover:text-white"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg><span class="text-[15px] font-medium">Presentations</span></a>
+            <a href="analytics.html" class="flex items-center gap-3.5 py-2 px-3 rounded-lg hover:bg-[#232323] transition-colors text-[#e0e0e0] hover:text-white"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="12" width="4" height="9" rx="1"/><rect x="10" y="8" width="4" height="13" rx="1"/><rect x="17" y="4" width="4" height="17" rx="1"/></svg><span class="text-[15px] font-medium">Analytics</span></a>
+            <a href="finalize.html" class="flex items-center gap-3.5 py-2 px-3 rounded-lg bg-[#232323] text-white"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/><path d="M3 9h6"/><circle cx="17" cy="7" r="2"/><path d="M14 14l3-3 4 4"/></svg><span class="text-[15px] font-medium">Finalize</span></a>
+            <a href="#" id="search-chat-btn" class="flex items-center gap-3.5 py-2 px-3 rounded-lg hover:bg-[#232323] transition-colors text-[#e0e0e0] hover:text-white">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><path d="M21 21l-4.3-4.3"></path></svg>
+                <span class="text-[15px] font-medium">Search Chat</span>
+            </a>
+        </nav>
+
+        <div id="chat-history-container" class="sidebar-hide mt-6 px-1 flex-1 overflow-y-auto"></div>
+        <div id="sidebar-auth" class="mt-auto flex flex-col gap-3 pt-6 pb-2"></div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 flex flex-col bg-[#1a1a1a] overflow-hidden">
+
+        <!-- Top Bar -->
+        <header class="h-14 flex items-center justify-between px-6 border-b border-[#2a2a2a] bg-[#1a1a1a] shrink-0">
+            <div class="flex items-center gap-3">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/><path d="M3 9h6"/><circle cx="17" cy="7" r="2"/><path d="M14 14l3-3 4 4"/></svg>
+                <h1 class="text-white text-[18px] font-semibold">Finalize Post</h1>
+            </div>
+            <div class="flex items-center gap-3">
+                <button id="reset-btn" class="btn-secondary">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                    Reset
+                </button>
+                <button id="download-btn" class="btn-primary" disabled>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    Download
+                </button>
+            </div>
+        </header>
+
+        <!-- Main workspace -->
+        <div class="flex flex-1 overflow-hidden">
+
+            <!-- LEFT: Canvas / Preview Area (60%) -->
+            <div class="flex-1 flex flex-col p-6 min-w-0" style="flex: 6;">
+                <div id="canvas-container" class="canvas-container">
+                    <!-- Drop zone placeholder (shown when no image) -->
+                    <div id="drop-placeholder" class="drop-placeholder">
+                        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
+                            <rect x="3" y="3" width="18" height="18" rx="2"/>
+                            <circle cx="8.5" cy="8.5" r="1.5"/>
+                            <path d="M21 15l-5-5L5 21"/>
+                        </svg>
+                        <div>
+                            <p class="text-[16px] font-medium text-[#888] mb-1">Drop an image here</p>
+                            <p class="text-[13px] text-[#555]">or click Upload, or paste with Ctrl+V</p>
+                        </div>
+                    </div>
+
+                    <!-- Image wrapper (hidden until image loaded) -->
+                    <div id="image-wrapper" class="image-wrapper" style="display: none;">
+                        <img id="preview-image" src="" alt="Preview" draggable="false">
+                        <!-- Text overlays will be added here dynamically -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- RIGHT: Controls Panel (40%) -->
+            <div class="controls-panel" style="flex: 4;">
+
+                <!-- Upload Section -->
+                <div class="control-section">
+                    <h3>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                        Upload Image
+                    </h3>
+                    <div id="upload-drop-zone" style="border: 2px dashed #444; border-radius: 10px; padding: 24px; text-align: center; cursor: pointer; transition: all 0.2s;">
+                        <input type="file" id="file-input" accept="image/*" style="display: none;">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="1.5" style="margin: 0 auto 8px;">
+                            <rect x="3" y="3" width="18" height="18" rx="2"/>
+                            <circle cx="8.5" cy="8.5" r="1.5"/>
+                            <path d="M21 15l-5-5L5 21"/>
+                        </svg>
+                        <p style="color: #888; font-size: 13px; margin-bottom: 4px;">Click or drag an image here</p>
+                        <p style="color: #555; font-size: 12px;">PNG, JPG, WebP supported</p>
+                    </div>
+                    <div id="image-info" style="display: none; margin-top: 12px; padding: 10px 14px; background: #2a2a2a; border-radius: 8px; font-size: 13px; color: #aaa; display: none;">
+                        <span id="image-info-text"></span>
+                    </div>
+                </div>
+
+                <!-- Watermark Removal Section -->
+                <div class="control-section">
+                    <h3>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                        Watermark Removal
+                    </h3>
+                    <p style="color: #777; font-size: 13px; margin-bottom: 14px; line-height: 1.5;">
+                        Re-encodes the image through canvas to strip all metadata including C2PA, EXIF, XMP, and SynthID markers.
+                    </p>
+                    <button id="remove-watermarks-btn" class="btn-primary" style="width: 100%; justify-content: center;" disabled>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>
+                        Remove Watermarks
+                    </button>
+                    <div id="watermark-status" style="display: none;"></div>
+                </div>
+
+                <!-- Text Overlays Section -->
+                <div class="control-section">
+                    <h3>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
+                        Text Overlays
+                    </h3>
+                    <button id="add-text-btn" class="btn-secondary" style="width: 100%; justify-content: center; margin-bottom: 14px;" disabled>
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                        Add Text Overlay
+                    </button>
+                    <div id="overlay-list" class="flex flex-col gap-3">
+                        <p id="no-overlays-msg" class="no-image-hint">Add text overlays after uploading an image</p>
+                    </div>
+                </div>
+
+                <!-- Text Style Settings -->
+                <div class="control-section" id="style-section" style="display: none;">
+                    <h3>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9"/></svg>
+                        Style Settings
+                        <span style="font-size: 11px; color: #666; font-weight: 400; margin-left: auto;">(selected overlay)</span>
+                    </h3>
+                    <div class="flex flex-col gap-14px" style="display: flex; flex-direction: column; gap: 14px;">
+                        <div class="slider-row">
+                            <label>Font Size</label>
+                            <input type="range" id="style-font-size" min="16" max="72" value="24">
+                            <span class="slider-value" id="style-font-size-val">24px</span>
+                        </div>
+                        <div class="slider-row">
+                            <label>Bar Padding</label>
+                            <input type="range" id="style-padding" min="4" max="32" value="8">
+                            <span class="slider-value" id="style-padding-val">8px</span>
+                        </div>
+                        <div class="slider-row">
+                            <label>Bar Opacity</label>
+                            <input type="range" id="style-opacity" min="50" max="100" value="90">
+                            <span class="slider-value" id="style-opacity-val">90%</span>
+                        </div>
+                        <div class="slider-row">
+                            <label>Corner Radius</label>
+                            <input type="range" id="style-radius" min="0" max="24" value="8">
+                            <span class="slider-value" id="style-radius-val">8px</span>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </main>
+
+    <!-- Custom Popup (replaces browser alert/confirm) -->
+    <div id="custom-popup" class="popup-overlay" style="display: none;">
+        <div class="popup-box">
+            <h3 id="popup-title"></h3>
+            <p id="popup-message"></p>
+            <button class="popup-btn" id="popup-ok-btn">OK</button>
+        </div>
+    </div>
+
+    <script>
+    (function() {
+        'use strict';
+
+        // ==================== State ====================
+        let currentImage = null;       // HTMLImageElement
+        let cleanDataURL = null;       // After watermark removal
+        let overlays = [];             // Array of overlay objects
+        let selectedOverlayId = null;
+        let overlayIdCounter = 0;
+        let draggingOverlay = null;
+        let dragOffset = { x: 0, y: 0 };
+
+        // ==================== DOM Elements ====================
+        const canvasContainer = document.getElementById('canvas-container');
+        const dropPlaceholder = document.getElementById('drop-placeholder');
+        const imageWrapper = document.getElementById('image-wrapper');
+        const previewImage = document.getElementById('preview-image');
+        const fileInput = document.getElementById('file-input');
+        const uploadDropZone = document.getElementById('upload-drop-zone');
+        const imageInfo = document.getElementById('image-info');
+        const imageInfoText = document.getElementById('image-info-text');
+        const removeWatermarksBtn = document.getElementById('remove-watermarks-btn');
+        const watermarkStatus = document.getElementById('watermark-status');
+        const addTextBtn = document.getElementById('add-text-btn');
+        const overlayList = document.getElementById('overlay-list');
+        const noOverlaysMsg = document.getElementById('no-overlays-msg');
+        const styleSection = document.getElementById('style-section');
+        const downloadBtn = document.getElementById('download-btn');
+        const resetBtn = document.getElementById('reset-btn');
+
+        // Style sliders
+        const styleFontSize = document.getElementById('style-font-size');
+        const stylePadding = document.getElementById('style-padding');
+        const styleOpacity = document.getElementById('style-opacity');
+        const styleRadius = document.getElementById('style-radius');
+        const styleFontSizeVal = document.getElementById('style-font-size-val');
+        const stylePaddingVal = document.getElementById('style-padding-val');
+        const styleOpacityVal = document.getElementById('style-opacity-val');
+        const styleRadiusVal = document.getElementById('style-radius-val');
+
+        // ==================== Custom Popup ====================
+        function showPopup(title, message) {
+            return new Promise((resolve) => {
+                const popup = document.getElementById('custom-popup');
+                document.getElementById('popup-title').textContent = title;
+                document.getElementById('popup-message').textContent = message;
+                popup.style.display = 'flex';
+                requestAnimationFrame(() => {
+                    popup.classList.add('visible');
+                });
+                const okBtn = document.getElementById('popup-ok-btn');
+                const handler = () => {
+                    okBtn.removeEventListener('click', handler);
+                    popup.classList.remove('visible');
+                    setTimeout(() => { popup.style.display = 'none'; }, 200);
+                    resolve();
+                };
+                okBtn.addEventListener('click', handler);
+            });
+        }
+
+        // ==================== Sidebar Toggle ====================
+        const sidebarToggleBtn = document.getElementById('sidebar-toggle-btn');
+        const sidebar = document.getElementById('sidebar');
+        if (sidebarToggleBtn) {
+            sidebarToggleBtn.addEventListener('click', () => {
+                sidebar.classList.toggle('sidebar-collapsed');
+            });
+        }
+
+        // ==================== Image Loading ====================
+        function loadImageFromFile(file) {
+            if (!file || !file.type.startsWith('image/')) {
+                showPopup('Invalid File', 'Please upload a valid image file (PNG, JPG, WebP).');
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = new Image();
+                img.onload = function() {
+                    currentImage = img;
+                    cleanDataURL = null;
+                    previewImage.src = e.target.result;
+                    dropPlaceholder.style.display = 'none';
+                    imageWrapper.style.display = 'inline-block';
+                    canvasContainer.classList.add('has-image');
+
+                    // Show image info
+                    imageInfo.style.display = 'block';
+                    imageInfoText.textContent = file.name + ' (' + img.naturalWidth + 'x' + img.naturalHeight + ', ' + formatBytes(file.size) + ')';
+
+                    // Enable buttons
+                    removeWatermarksBtn.disabled = false;
+                    addTextBtn.disabled = false;
+                    downloadBtn.disabled = false;
+
+                    // Reset watermark status
+                    watermarkStatus.style.display = 'none';
+                    watermarkStatus.innerHTML = '';
+
+                    // Reposition overlays
+                    repositionOverlays();
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function loadImageFromDataURL(dataURL) {
+            const img = new Image();
+            img.onload = function() {
+                currentImage = img;
+                cleanDataURL = null;
+                previewImage.src = dataURL;
+                dropPlaceholder.style.display = 'none';
+                imageWrapper.style.display = 'inline-block';
+                canvasContainer.classList.add('has-image');
+
+                imageInfo.style.display = 'block';
+                imageInfoText.textContent = 'Pasted image (' + img.naturalWidth + 'x' + img.naturalHeight + ')';
+
+                removeWatermarksBtn.disabled = false;
+                addTextBtn.disabled = false;
+                downloadBtn.disabled = false;
+
+                watermarkStatus.style.display = 'none';
+                watermarkStatus.innerHTML = '';
+
+                repositionOverlays();
+            };
+            img.src = dataURL;
+        }
+
+        function formatBytes(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        }
+
+        // ==================== Upload Handlers ====================
+
+        // Click to upload
+        uploadDropZone.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files && e.target.files[0]) {
+                loadImageFromFile(e.target.files[0]);
+            }
+        });
+
+        // Drag & drop on upload zone
+        uploadDropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadDropZone.style.borderColor = '#6366f1';
+            uploadDropZone.style.background = 'rgba(99, 102, 241, 0.05)';
+        });
+
+        uploadDropZone.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            uploadDropZone.style.borderColor = '#444';
+            uploadDropZone.style.background = 'transparent';
+        });
+
+        uploadDropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadDropZone.style.borderColor = '#444';
+            uploadDropZone.style.background = 'transparent';
+            if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                loadImageFromFile(e.dataTransfer.files[0]);
+            }
+        });
+
+        // Drag & drop on canvas area
+        canvasContainer.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            canvasContainer.classList.add('drag-over');
+        });
+
+        canvasContainer.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            canvasContainer.classList.remove('drag-over');
+        });
+
+        canvasContainer.addEventListener('drop', (e) => {
+            e.preventDefault();
+            canvasContainer.classList.remove('drag-over');
+            if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                loadImageFromFile(e.dataTransfer.files[0]);
+            }
+        });
+
+        // Clipboard paste (Ctrl+V)
+        document.addEventListener('paste', (e) => {
+            const items = e.clipboardData && e.clipboardData.items;
+            if (!items) return;
+
+            for (let i = 0; i < items.length; i++) {
+                if (items[i].type.startsWith('image/')) {
+                    const file = items[i].getAsFile();
+                    if (file) {
+                        loadImageFromFile(file);
+                    }
+                    return;
+                }
+            }
+
+            // Also check for data URL in text
+            const text = e.clipboardData.getData('text');
+            if (text && text.startsWith('data:image/')) {
+                loadImageFromDataURL(text);
+            }
+        });
+
+        // ==================== Watermark Removal ====================
+        removeWatermarksBtn.addEventListener('click', async () => {
+            if (!currentImage) {
+                showPopup('No Image', 'Please upload an image first.');
+                return;
+            }
+
+            removeWatermarksBtn.disabled = true;
+            removeWatermarksBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation: spin 1s linear infinite;"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Processing...';
+
+            if (!document.getElementById('spin-style')) {
+                const style = document.createElement('style');
+                style.id = 'spin-style';
+                style.textContent = '@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }';
+                document.head.appendChild(style);
+            }
+
+            await new Promise(r => setTimeout(r, 50));
+
+            try {
+                    const w = currentImage.naturalWidth;
+                    const h = currentImage.naturalHeight;
+                    const canvas = document.createElement('canvas');
+                    canvas.width = w;
+                    canvas.height = h;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(currentImage, 0, 0);
+
+                    // ═══════════════════════════════════════════════════
+                    // GEMINI WATERMARK REMOVAL - Clone & Blend method
+                    // ═══════════════════════════════════════════════════
+                    // Positions from official Gemini documentation:
+                    //   Small (≤1024px): 48x48, margin 32px from bottom-right
+                    //   Large (>1024px): 96x96, margin 64px from bottom-right
+                    //
+                    // We clone the area directly ABOVE the watermark and blend
+                    // it over the star. This is 100% reliable regardless of
+                    // watermark version or alpha mask changes.
+
+                    const isLarge = (w > 1024 && h > 1024);
+                    const wmSize = isLarge ? 96 : 48;
+                    const wmMargin = isLarge ? 64 : 32;
+                    const pad = Math.round(wmSize * 0.15); // extra padding around star
+                    const patchSize = wmSize + pad * 2;
+
+                    const patchX = w - wmSize - wmMargin - pad;
+                    const patchY = h - wmSize - wmMargin - pad;
+
+                    // Source: area directly ABOVE the watermark (same X, shifted up)
+                    const srcY = Math.max(0, patchY - patchSize - 2);
+
+                    // Clone from above onto watermark area
+                    ctx.drawImage(canvas,
+                        patchX, srcY, patchSize, patchSize,   // source
+                        patchX, patchY, patchSize, patchSize   // destination
+                    );
+
+                    // Blend the top edge to avoid a hard seam
+                    // Draw a gradient that fades the clone into the original
+                    const blendH = Math.round(patchSize * 0.25);
+                    const grad = ctx.createLinearGradient(0, patchY, 0, patchY + blendH);
+                    grad.addColorStop(0, 'rgba(0,0,0,1)');
+                    grad.addColorStop(1, 'rgba(0,0,0,0)');
+
+                    // Save the cloned result, redraw original, then blend
+                    const clonedData = ctx.getImageData(patchX, patchY, patchSize, patchSize);
+                    ctx.drawImage(currentImage, 0, 0); // redraw original
+                    ctx.putImageData(clonedData, patchX, patchY); // put clone back
+
+                    // Now softly blend the edges by averaging with a feathered border
+                    const edgeSize = Math.round(patchSize * 0.2);
+                    // Top edge feather
+                    for (let fy = 0; fy < edgeSize; fy++) {
+                        const alpha = fy / edgeSize; // 0 at top (transparent) → 1 (opaque)
+                        const origRow = ctx.getImageData(patchX, patchY + fy, patchSize, 1);
+                        // Re-read from original image at this position
+                        const tmpCanvas = document.createElement('canvas');
+                        tmpCanvas.width = w; tmpCanvas.height = h;
+                        const tmpCtx = tmpCanvas.getContext('2d');
+                        tmpCtx.drawImage(currentImage, 0, 0);
+                        const origPixels = tmpCtx.getImageData(patchX, patchY + fy, patchSize, 1);
+                        const blended = ctx.getImageData(patchX, patchY + fy, patchSize, 1);
+                        for (let x = 0; x < blended.data.length; x += 4) {
+                            blended.data[x]   = Math.round(origPixels.data[x]   * (1 - alpha) + blended.data[x]   * alpha);
+                            blended.data[x+1] = Math.round(origPixels.data[x+1] * (1 - alpha) + blended.data[x+1] * alpha);
+                            blended.data[x+2] = Math.round(origPixels.data[x+2] * (1 - alpha) + blended.data[x+2] * alpha);
+                        }
+                        ctx.putImageData(blended, patchX, patchY + fy);
+                    }
+                    // Left edge feather
+                    for (let fx = 0; fx < edgeSize; fx++) {
+                        const alpha = fx / edgeSize;
+                        const tmpCanvas2 = document.createElement('canvas');
+                        tmpCanvas2.width = w; tmpCanvas2.height = h;
+                        const tmpCtx2 = tmpCanvas2.getContext('2d');
+                        tmpCtx2.drawImage(currentImage, 0, 0);
+                        const col = ctx.getImageData(patchX + fx, patchY, 1, patchSize);
+                        const origCol = tmpCtx2.getImageData(patchX + fx, patchY, 1, patchSize);
+                        for (let y = 0; y < col.data.length; y += 4) {
+                            col.data[y]   = Math.round(origCol.data[y]   * (1 - alpha) + col.data[y]   * alpha);
+                            col.data[y+1] = Math.round(origCol.data[y+1] * (1 - alpha) + col.data[y+1] * alpha);
+                            col.data[y+2] = Math.round(origCol.data[y+2] * (1 - alpha) + col.data[y+2] * alpha);
+                        }
+                        ctx.putImageData(col, patchX + fx, patchY);
+                    }
+
+                    // Re-encode as PNG (also strips all metadata: C2PA, EXIF, XMP, SynthID)
+                    cleanDataURL = canvas.toDataURL('image/png');
+
+                    const cleanImg = new Image();
+                    cleanImg.onload = function() {
+                        currentImage = cleanImg;
+                        previewImage.src = cleanDataURL;
+
+                        removeWatermarksBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg> Remove Watermarks';
+                        removeWatermarksBtn.disabled = false;
+
+                        watermarkStatus.style.display = 'block';
+                        watermarkStatus.className = 'watermark-status success';
+                        watermarkStatus.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg> Watermark removed (${wmSize}×${wmSize}) &amp; metadata stripped`;
+                    };
+                    cleanImg.src = cleanDataURL;
+            } catch (err) {
+                removeWatermarksBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg> Remove Watermarks';
+                removeWatermarksBtn.disabled = false;
+
+                watermarkStatus.style.display = 'block';
+                watermarkStatus.className = 'watermark-status pending';
+                watermarkStatus.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> Error: ' + err.message;
+            }
+        });
+
+        // ==================== Text Overlays ====================
+        function createOverlay() {
+            const id = ++overlayIdCounter;
+            const overlay = {
+                id: id,
+                text: 'Your Text Here',
+                fontSize: 24,
+                padding: 8,
+                opacity: 90,
+                radius: 8,
+                x: 50,  // percentage position
+                y: 50
+            };
+            overlays.push(overlay);
+
+            // Create DOM element on image
+            const el = document.createElement('div');
+            el.className = 'text-overlay';
+            el.dataset.overlayId = id;
+            el.innerHTML = '<div class="text-overlay-inner">' + escapeHtml(overlay.text) + '</div>';
+            imageWrapper.appendChild(el);
+
+            // Position it centered
+            positionOverlayElement(el, overlay);
+
+            // Create list item in controls
+            renderOverlayList();
+
+            // Select this overlay
+            selectOverlay(id);
+
+            // Setup drag
+            setupOverlayDrag(el, overlay);
+
+            return overlay;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML.replace(/\n/g, '<br>');
+        }
+
+        function positionOverlayElement(el, overlay) {
+            const imgRect = previewImage.getBoundingClientRect();
+            const wrapperRect = imageWrapper.getBoundingClientRect();
+
+            // Calculate offset of image within wrapper
+            const offsetX = previewImage.offsetLeft;
+            const offsetY = previewImage.offsetTop;
+
+            const inner = el.querySelector('.text-overlay-inner');
+            inner.style.fontSize = overlay.fontSize + 'px';
+            inner.style.padding = overlay.padding + 'px ' + (overlay.padding * 2) + 'px';
+            inner.style.background = 'rgba(255, 255, 255, ' + (overlay.opacity / 100) + ')';
+            inner.style.borderRadius = overlay.radius + 'px';
+
+            // Position using percentage of displayed image
+            const imgW = previewImage.offsetWidth;
+            const imgH = previewImage.offsetHeight;
+
+            const left = offsetX + (overlay.x / 100) * imgW;
+            const top = offsetY + (overlay.y / 100) * imgH;
+
+            el.style.left = left + 'px';
+            el.style.top = top + 'px';
+
+            // Center the overlay on its position
+            requestAnimationFrame(() => {
+                const elW = el.offsetWidth;
+                const elH = el.offsetHeight;
+                el.style.left = (left - elW / 2) + 'px';
+                el.style.top = (top - elH / 2) + 'px';
+            });
+        }
+
+        function repositionOverlays() {
+            overlays.forEach(overlay => {
+                const el = imageWrapper.querySelector('[data-overlay-id="' + overlay.id + '"]');
+                if (el) {
+                    positionOverlayElement(el, overlay);
+                }
+            });
+        }
+
+        function updateOverlayStyle(overlay) {
+            const el = imageWrapper.querySelector('[data-overlay-id="' + overlay.id + '"]');
+            if (!el) return;
+            const inner = el.querySelector('.text-overlay-inner');
+            inner.style.fontSize = overlay.fontSize + 'px';
+            inner.style.padding = overlay.padding + 'px ' + (overlay.padding * 2) + 'px';
+            inner.style.background = 'rgba(255, 255, 255, ' + (overlay.opacity / 100) + ')';
+            inner.style.borderRadius = overlay.radius + 'px';
+        }
+
+        function updateOverlayText(overlay) {
+            const el = imageWrapper.querySelector('[data-overlay-id="' + overlay.id + '"]');
+            if (!el) return;
+            el.querySelector('.text-overlay-inner').innerHTML = escapeHtml(overlay.text);
+        }
+
+        function deleteOverlay(id) {
+            overlays = overlays.filter(o => o.id !== id);
+            const el = imageWrapper.querySelector('[data-overlay-id="' + id + '"]');
+            if (el) el.remove();
+            if (selectedOverlayId === id) {
+                selectedOverlayId = null;
+                styleSection.style.display = 'none';
+            }
+            renderOverlayList();
+        }
+
+        function selectOverlay(id) {
+            selectedOverlayId = id;
+
+            // Update visual selection on canvas
+            imageWrapper.querySelectorAll('.text-overlay').forEach(el => {
+                el.classList.toggle('selected', parseInt(el.dataset.overlayId) === id);
+            });
+
+            // Update list items
+            overlayList.querySelectorAll('.overlay-item').forEach(item => {
+                item.classList.toggle('active', parseInt(item.dataset.overlayId) === id);
+            });
+
+            // Show style section
+            const overlay = overlays.find(o => o.id === id);
+            if (overlay) {
+                styleSection.style.display = 'block';
+                styleFontSize.value = overlay.fontSize;
+                styleFontSizeVal.textContent = overlay.fontSize + 'px';
+                stylePadding.value = overlay.padding;
+                stylePaddingVal.textContent = overlay.padding + 'px';
+                styleOpacity.value = overlay.opacity;
+                styleOpacityVal.textContent = overlay.opacity + '%';
+                styleRadius.value = overlay.radius;
+                styleRadiusVal.textContent = overlay.radius + 'px';
+            }
+        }
+
+        function deselectAll() {
+            selectedOverlayId = null;
+            imageWrapper.querySelectorAll('.text-overlay').forEach(el => {
+                el.classList.remove('selected');
+            });
+            overlayList.querySelectorAll('.overlay-item').forEach(item => {
+                item.classList.remove('active');
+            });
+            styleSection.style.display = 'none';
+        }
+
+        function renderOverlayList() {
+            // Remove all overlay items but keep the no-overlays message
+            overlayList.querySelectorAll('.overlay-item').forEach(item => item.remove());
+
+            if (overlays.length === 0) {
+                noOverlaysMsg.style.display = 'block';
+                noOverlaysMsg.textContent = currentImage ? 'No text overlays yet. Click "Add Text Overlay" to begin.' : 'Add text overlays after uploading an image';
+                return;
+            }
+
+            noOverlaysMsg.style.display = 'none';
+
+            overlays.forEach(overlay => {
+                const item = document.createElement('div');
+                item.className = 'overlay-item' + (overlay.id === selectedOverlayId ? ' active' : '');
+                item.dataset.overlayId = overlay.id;
+
+                const topRow = document.createElement('div');
+                topRow.style.cssText = 'display: flex; align-items: center; gap: 8px;';
+
+                const textInput = document.createElement('textarea');
+                textInput.className = 'overlay-text';
+                textInput.value = overlay.text;
+                textInput.placeholder = 'Enter text...';
+                textInput.rows = 1;
+                textInput.style.flex = '1';
+                textInput.addEventListener('input', (e) => {
+                    overlay.text = e.target.value;
+                    // Auto-resize textarea
+                    e.target.style.height = 'auto';
+                    e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
+                    updateOverlayText(overlay);
+                });
+                textInput.addEventListener('focus', () => {
+                    selectOverlay(overlay.id);
+                });
+                textInput.addEventListener('keydown', (e) => {
+                    // Allow Enter for new lines (don't let it propagate)
+                    if (e.key === 'Enter') e.stopPropagation();
+                });
+
+                const deleteBtn = document.createElement('button');
+                deleteBtn.className = 'delete-overlay-btn';
+                deleteBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+                deleteBtn.title = 'Delete overlay';
+                deleteBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    deleteOverlay(overlay.id);
+                });
+
+                topRow.appendChild(textInput);
+                topRow.appendChild(deleteBtn);
+
+                const sizeRow = document.createElement('div');
+                sizeRow.style.cssText = 'display: flex; align-items: center; gap: 8px;';
+
+                const sizeLabel = document.createElement('label');
+                sizeLabel.textContent = 'Size';
+                sizeLabel.style.cssText = 'font-size: 11px; color: #777; min-width: 32px;';
+
+                const sizeSlider = document.createElement('input');
+                sizeSlider.type = 'range';
+                sizeSlider.min = '16';
+                sizeSlider.max = '72';
+                sizeSlider.value = overlay.fontSize;
+                sizeSlider.style.flex = '1';
+                sizeSlider.addEventListener('input', (e) => {
+                    overlay.fontSize = parseInt(e.target.value);
+                    updateOverlayStyle(overlay);
+                    sizeVal.textContent = overlay.fontSize + 'px';
+                    if (overlay.id === selectedOverlayId) {
+                        styleFontSize.value = overlay.fontSize;
+                        styleFontSizeVal.textContent = overlay.fontSize + 'px';
+                    }
+                });
+                sizeSlider.addEventListener('mousedown', () => {
+                    selectOverlay(overlay.id);
+                });
+
+                const sizeVal = document.createElement('span');
+                sizeVal.textContent = overlay.fontSize + 'px';
+                sizeVal.style.cssText = 'font-size: 11px; color: #777; min-width: 36px; text-align: right;';
+
+                sizeRow.appendChild(sizeLabel);
+                sizeRow.appendChild(sizeSlider);
+                sizeRow.appendChild(sizeVal);
+
+                item.appendChild(topRow);
+                item.appendChild(sizeRow);
+
+                item.addEventListener('click', (e) => {
+                    if (e.target.tagName !== 'INPUT') {
+                        selectOverlay(overlay.id);
+                    }
+                });
+
+                overlayList.appendChild(item);
+            });
+        }
+
+        // ==================== Overlay Drag & Drop ====================
+        function setupOverlayDrag(el, overlay) {
+            el.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                selectOverlay(overlay.id);
+
+                draggingOverlay = overlay;
+                const rect = el.getBoundingClientRect();
+                dragOffset.x = e.clientX - rect.left;
+                dragOffset.y = e.clientY - rect.top;
+
+                el.style.cursor = 'grabbing';
+                el.style.zIndex = '20';
+            });
+
+            el.addEventListener('click', (e) => {
+                e.stopPropagation();
+                selectOverlay(overlay.id);
+            });
+        }
+
+        document.addEventListener('mousemove', (e) => {
+            if (!draggingOverlay) return;
+
+            const wrapperRect = imageWrapper.getBoundingClientRect();
+            const imgEl = previewImage;
+            const imgOffsetX = imgEl.offsetLeft;
+            const imgOffsetY = imgEl.offsetTop;
+            const imgW = imgEl.offsetWidth;
+            const imgH = imgEl.offsetHeight;
+
+            const el = imageWrapper.querySelector('[data-overlay-id="' + draggingOverlay.id + '"]');
+            if (!el) return;
+
+            const elW = el.offsetWidth;
+            const elH = el.offsetHeight;
+
+            // Calculate new position relative to wrapper
+            let newLeft = e.clientX - wrapperRect.left - dragOffset.x;
+            let newTop = e.clientY - wrapperRect.top - dragOffset.y;
+
+            // Constrain to image bounds - overlay must stay fully inside
+            const minX = imgOffsetX;
+            const maxX = imgOffsetX + imgW - elW;
+            const minY = imgOffsetY;
+            const maxY = imgOffsetY + imgH - elH;
+
+            newLeft = Math.max(minX, Math.min(maxX, newLeft));
+            newTop = Math.max(minY, Math.min(maxY, newTop));
+
+            el.style.left = newLeft + 'px';
+            el.style.top = newTop + 'px';
+
+            // Update overlay percentage position (center of element relative to image)
+            const centerX = newLeft + elW / 2 - imgOffsetX;
+            const centerY = newTop + elH / 2 - imgOffsetY;
+            draggingOverlay.x = (centerX / imgW) * 100;
+            draggingOverlay.y = (centerY / imgH) * 100;
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (draggingOverlay) {
+                const el = imageWrapper.querySelector('[data-overlay-id="' + draggingOverlay.id + '"]');
+                if (el) {
+                    el.style.cursor = 'grab';
+                    el.style.zIndex = '10';
+                }
+                draggingOverlay = null;
+            }
+        });
+
+        // Click on empty area to deselect
+        canvasContainer.addEventListener('mousedown', (e) => {
+            if (e.target === canvasContainer || e.target === imageWrapper || e.target === previewImage || e.target === dropPlaceholder) {
+                deselectAll();
+            }
+        });
+
+        // ==================== Add Text Button ====================
+        addTextBtn.addEventListener('click', () => {
+            if (!currentImage) {
+                showPopup('No Image', 'Please upload an image first.');
+                return;
+            }
+            createOverlay();
+        });
+
+        // ==================== Style Sliders ====================
+        styleFontSize.addEventListener('input', (e) => {
+            const val = parseInt(e.target.value);
+            styleFontSizeVal.textContent = val + 'px';
+            const overlay = overlays.find(o => o.id === selectedOverlayId);
+            if (overlay) {
+                overlay.fontSize = val;
+                updateOverlayStyle(overlay);
+                renderOverlayList();
+            }
+        });
+
+        stylePadding.addEventListener('input', (e) => {
+            const val = parseInt(e.target.value);
+            stylePaddingVal.textContent = val + 'px';
+            const overlay = overlays.find(o => o.id === selectedOverlayId);
+            if (overlay) {
+                overlay.padding = val;
+                updateOverlayStyle(overlay);
+            }
+        });
+
+        styleOpacity.addEventListener('input', (e) => {
+            const val = parseInt(e.target.value);
+            styleOpacityVal.textContent = val + '%';
+            const overlay = overlays.find(o => o.id === selectedOverlayId);
+            if (overlay) {
+                overlay.opacity = val;
+                updateOverlayStyle(overlay);
+            }
+        });
+
+        styleRadius.addEventListener('input', (e) => {
+            const val = parseInt(e.target.value);
+            styleRadiusVal.textContent = val + 'px';
+            const overlay = overlays.find(o => o.id === selectedOverlayId);
+            if (overlay) {
+                overlay.radius = val;
+                updateOverlayStyle(overlay);
+            }
+        });
+
+        // ==================== Download ====================
+        downloadBtn.addEventListener('click', () => {
+            if (!currentImage) {
+                showPopup('No Image', 'Please upload an image first.');
+                return;
+            }
+
+            renderFinalImage().then(dataURL => {
+                const link = document.createElement('a');
+                link.download = 'finalized-post.png';
+                link.href = dataURL;
+                link.click();
+            });
+        });
+
+        function renderFinalImage() {
+            return new Promise((resolve) => {
+                const canvas = document.createElement('canvas');
+                const natW = currentImage.naturalWidth;
+                const natH = currentImage.naturalHeight;
+                canvas.width = natW;
+                canvas.height = natH;
+                const ctx = canvas.getContext('2d');
+
+                // Draw the image
+                ctx.drawImage(currentImage, 0, 0, natW, natH);
+
+                // Calculate scale factor between displayed image and natural image
+                const displayW = previewImage.offsetWidth;
+                const displayH = previewImage.offsetHeight;
+                const scaleX = natW / displayW;
+                const scaleY = natH / displayH;
+
+                // Draw each text overlay
+                overlays.forEach(overlay => {
+                    const el = imageWrapper.querySelector('[data-overlay-id="' + overlay.id + '"]');
+                    if (!el) return;
+
+                    const inner = el.querySelector('.text-overlay-inner');
+                    const text = overlay.text;
+                    if (!text.trim()) return;
+
+                    // Get position of overlay relative to the displayed image
+                    const elRect = el.getBoundingClientRect();
+                    const imgRect = previewImage.getBoundingClientRect();
+                    const relX = elRect.left - imgRect.left;
+                    const relY = elRect.top - imgRect.top;
+                    const relW = elRect.width;
+                    const relH = elRect.height;
+
+                    // Scale to natural image coordinates
+                    const natX = relX * scaleX;
+                    const natY = relY * scaleY;
+                    const natOvW = relW * scaleX;
+                    const natOvH = relH * scaleY;
+
+                    // Scaled properties
+                    const scaledFontSize = overlay.fontSize * scaleX;
+                    const scaledPadX = overlay.padding * 2 * scaleX;
+                    const scaledPadY = overlay.padding * scaleY;
+                    const scaledRadius = overlay.radius * scaleX;
+
+                    // Measure text for the natural resolution
+                    ctx.font = '700 ' + scaledFontSize + 'px Inter, sans-serif';
+                    const metrics = ctx.measureText(text);
+                    const textWidth = metrics.width;
+                    const textHeight = scaledFontSize * 1.3;
+
+                    // Background rect dimensions
+                    const bgW = textWidth + scaledPadX * 2;
+                    const bgH = textHeight + scaledPadY * 2;
+
+                    // Center the background on the overlay position
+                    const bgX = natX;
+                    const bgY = natY;
+
+                    // Draw rounded rectangle background
+                    ctx.fillStyle = 'rgba(255, 255, 255, ' + (overlay.opacity / 100) + ')';
+                    drawRoundedRect(ctx, bgX, bgY, natOvW, natOvH, scaledRadius);
+                    ctx.fill();
+
+                    // Draw text (supports multi-line)
+                    ctx.fillStyle = '#000000';
+                    ctx.font = '700 ' + scaledFontSize + 'px Inter, sans-serif';
+                    ctx.textBaseline = 'middle';
+                    ctx.textAlign = 'center';
+                    const lines = text.split('\n');
+                    const lineHeight = scaledFontSize * 1.4;
+                    const totalTextH = lines.length * lineHeight;
+                    const startY = bgY + (natOvH - totalTextH) / 2 + lineHeight / 2;
+                    lines.forEach((line, i) => {
+                        ctx.fillText(line, bgX + natOvW / 2, startY + i * lineHeight);
+                    });
+                });
+
+                resolve(canvas.toDataURL('image/png'));
+            });
+        }
+
+        function drawRoundedRect(ctx, x, y, w, h, r) {
+            r = Math.min(r, w / 2, h / 2);
+            ctx.beginPath();
+            ctx.moveTo(x + r, y);
+            ctx.lineTo(x + w - r, y);
+            ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+            ctx.lineTo(x + w, y + h - r);
+            ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+            ctx.lineTo(x + r, y + h);
+            ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+            ctx.lineTo(x, y + r);
+            ctx.quadraticCurveTo(x, y, x + r, y);
+            ctx.closePath();
+        }
+
+        // ==================== Reset ====================
+        resetBtn.addEventListener('click', () => {
+            // Clear all state
+            currentImage = null;
+            cleanDataURL = null;
+            selectedOverlayId = null;
+            draggingOverlay = null;
+
+            // Remove all overlay DOM elements
+            imageWrapper.querySelectorAll('.text-overlay').forEach(el => el.remove());
+            overlays = [];
+
+            // Reset UI
+            previewImage.src = '';
+            imageWrapper.style.display = 'none';
+            dropPlaceholder.style.display = 'flex';
+            canvasContainer.classList.remove('has-image');
+
+            imageInfo.style.display = 'none';
+            imageInfoText.textContent = '';
+
+            removeWatermarksBtn.disabled = true;
+            addTextBtn.disabled = true;
+            downloadBtn.disabled = true;
+
+            watermarkStatus.style.display = 'none';
+            watermarkStatus.innerHTML = '';
+
+            styleSection.style.display = 'none';
+
+            renderOverlayList();
+
+            // Reset file input
+            fileInput.value = '';
+        });
+
+        // ==================== Window Resize ====================
+        let resizeTimeout;
+        window.addEventListener('resize', () => {
+            clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(() => {
+                repositionOverlays();
+            }, 100);
+        });
+
+        // ==================== Touch Support for Mobile ====================
+        function setupOverlayTouch(el, overlay) {
+            el.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                selectOverlay(overlay.id);
+
+                const touch = e.touches[0];
+                const rect = el.getBoundingClientRect();
+                dragOffset.x = touch.clientX - rect.left;
+                dragOffset.y = touch.clientY - rect.top;
+                draggingOverlay = overlay;
+                el.style.zIndex = '20';
+            }, { passive: false });
+        }
+
+        document.addEventListener('touchmove', (e) => {
+            if (!draggingOverlay) return;
+            e.preventDefault();
+
+            const touch = e.touches[0];
+            const wrapperRect = imageWrapper.getBoundingClientRect();
+            const imgEl = previewImage;
+            const imgOffsetX = imgEl.offsetLeft;
+            const imgOffsetY = imgEl.offsetTop;
+            const imgW = imgEl.offsetWidth;
+            const imgH = imgEl.offsetHeight;
+
+            const el = imageWrapper.querySelector('[data-overlay-id="' + draggingOverlay.id + '"]');
+            if (!el) return;
+
+            const elW = el.offsetWidth;
+            const elH = el.offsetHeight;
+
+            let newLeft = touch.clientX - wrapperRect.left - dragOffset.x;
+            let newTop = touch.clientY - wrapperRect.top - dragOffset.y;
+
+            // Constrain to image bounds - overlay must stay fully inside
+            const minX = imgOffsetX;
+            const maxX = imgOffsetX + imgW - elW;
+            const minY = imgOffsetY;
+            const maxY = imgOffsetY + imgH - elH;
+
+            newLeft = Math.max(minX, Math.min(maxX, newLeft));
+            newTop = Math.max(minY, Math.min(maxY, newTop));
+
+            el.style.left = newLeft + 'px';
+            el.style.top = newTop + 'px';
+
+            const centerX = newLeft + elW / 2 - imgOffsetX;
+            const centerY = newTop + elH / 2 - imgOffsetY;
+            draggingOverlay.x = (centerX / imgW) * 100;
+            draggingOverlay.y = (centerY / imgH) * 100;
+        }, { passive: false });
+
+        document.addEventListener('touchend', () => {
+            if (draggingOverlay) {
+                const el = imageWrapper.querySelector('[data-overlay-id="' + draggingOverlay.id + '"]');
+                if (el) {
+                    el.style.zIndex = '10';
+                }
+                draggingOverlay = null;
+            }
+        });
+
+        // Patch createOverlay to also add touch support
+        const originalCreateOverlay = createOverlay;
+        // We'll modify the existing function instead
+
+        // Override setupOverlayDrag to also include touch
+        const origSetupDrag = setupOverlayDrag;
+
+        // Actually, let's add touch events in the existing setupOverlayDrag flow
+        // We need to patch the createOverlay function
+        // Since createOverlay calls setupOverlayDrag which only does mouse,
+        // let's also call setupOverlayTouch in createOverlay
+
+        // MutationObserver to catch new overlay elements and add touch
+        const observer = new MutationObserver((mutations) => {
+            mutations.forEach(mutation => {
+                mutation.addedNodes.forEach(node => {
+                    if (node.nodeType === 1 && node.classList && node.classList.contains('text-overlay')) {
+                        const id = parseInt(node.dataset.overlayId);
+                        const overlay = overlays.find(o => o.id === id);
+                        if (overlay) {
+                            setupOverlayTouch(node, overlay);
+                        }
+                    }
+                });
+            });
+        });
+        observer.observe(imageWrapper, { childList: true });
+
+        // ==================== Keyboard Shortcuts ====================
+        document.addEventListener('keydown', (e) => {
+            // Delete selected overlay with Delete/Backspace (when not focused on input)
+            if ((e.key === 'Delete' || e.key === 'Backspace') && selectedOverlayId && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
+                e.preventDefault();
+                deleteOverlay(selectedOverlayId);
+            }
+
+            // Escape to deselect
+            if (e.key === 'Escape') {
+                deselectAll();
+            }
+        });
+
+    })();
+    </script>
+</body>
+</html>
