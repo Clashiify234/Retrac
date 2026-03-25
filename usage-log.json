@@ -581,5 +581,16 @@
     "outputTokens": 31,
     "cost": 0,
     "duration": 4960
+  },
+  {
+    "timestamp": 1774464968182,
+    "provider": "google",
+    "model": "gemini-2.5-flash-image",
+    "modelDisplay": "Nano Banana",
+    "type": "image",
+    "inputTokens": 0,
+    "outputTokens": 0,
+    "cost": 0.04,
+    "duration": 8193
   }
 ]

@@ -641,14 +641,81 @@
         // ========== Generation ==========
         const imgPrompt = document.getElementById('img-prompt');
         const generateBtn = document.getElementById('generate-btn');
-        let userCreations = JSON.parse(localStorage.getItem('retrac_creations') || '[]');
+        // ========== IndexedDB Storage for Creations ==========
+        const CreationsDB = {
+            DB_NAME: 'retrac_creations_db',
+            STORE_NAME: 'creations',
+            DB_VERSION: 1,
+            _db: null,
+            async open() {
+                if (this._db) return this._db;
+                return new Promise((resolve, reject) => {
+                    const req = indexedDB.open(this.DB_NAME, this.DB_VERSION);
+                    req.onupgradeneeded = (e) => {
+                        const db = e.target.result;
+                        if (!db.objectStoreNames.contains(this.STORE_NAME)) {
+                            db.createObjectStore(this.STORE_NAME, { keyPath: 'id', autoIncrement: true });
+                        }
+                    };
+                    req.onsuccess = () => { this._db = req.result; resolve(req.result); };
+                    req.onerror = () => reject(req.error);
+                });
+            },
+            async getAll() {
+                const db = await this.open();
+                return new Promise((resolve, reject) => {
+                    const tx = db.transaction(this.STORE_NAME, 'readonly');
+                    const store = tx.objectStore(this.STORE_NAME);
+                    const req = store.getAll();
+                    req.onsuccess = () => resolve(req.result.reverse());
+                    req.onerror = () => reject(req.error);
+                });
+            },
+            async add(creation) {
+                const db = await this.open();
+                return new Promise((resolve, reject) => {
+                    const tx = db.transaction(this.STORE_NAME, 'readwrite');
+                    const store = tx.objectStore(this.STORE_NAME);
+                    const req = store.add(creation);
+                    req.onsuccess = () => resolve(req.result);
+                    req.onerror = () => reject(req.error);
+                });
+            },
+            async delete(id) {
+                const db = await this.open();
+                return new Promise((resolve, reject) => {
+                    const tx = db.transaction(this.STORE_NAME, 'readwrite');
+                    const store = tx.objectStore(this.STORE_NAME);
+                    const req = store.delete(id);
+                    req.onsuccess = () => resolve();
+                    req.onerror = () => reject(req.error);
+                });
+            }
+        };
 
-        // Migrate old creations that don't have a type
-        userCreations = userCreations.map(c => {
-            if (!c.type) c.type = 'image';
-            return c;
-        });
-        localStorage.setItem('retrac_creations', JSON.stringify(userCreations));
+        let userCreations = [];
+
+        async function initCreations() {
+            // Migrate from localStorage if data exists
+            const oldData = localStorage.getItem('retrac_creations');
+            if (oldData) {
+                try {
+                    const old = JSON.parse(oldData);
+                    for (const c of old) {
+                        if (!c.type) c.type = 'image';
+                        // Skip broken /uploads/ URLs that won't work after redeploy
+                        if (c.url && c.url.startsWith('/uploads/')) continue;
+                        await CreationsDB.add(c);
+                    }
+                    localStorage.removeItem('retrac_creations');
+                } catch (e) {
+                    console.warn('Creations migration failed:', e);
+                }
+            }
+            userCreations = await CreationsDB.getAll();
+            renderCreations();
+        }
+        initCreations();
 
         async function generate() {
             const prompt = imgPrompt.value.trim();
@@ -692,8 +759,8 @@
                 }
 
                 const creation = { type: 'image', url: result.url, prompt, revisedPrompt: result.revised_prompt, createdAt: Date.now() };
-                userCreations.unshift(creation);
-                localStorage.setItem('retrac_creations', JSON.stringify(userCreations));
+                await CreationsDB.add(creation);
+                userCreations = await CreationsDB.getAll();
                 renderCreations();
             } catch (err) {
                 creationsView.innerHTML = `<div class="flex flex-col items-center justify-center h-full"><p class="text-red-400 text-[14px]">${err.message}</p></div>`;
@@ -724,8 +791,8 @@
                 }
 
                 const creation = { type: 'video', url: result.url, prompt, createdAt: Date.now() };
-                userCreations.unshift(creation);
-                localStorage.setItem('retrac_creations', JSON.stringify(userCreations));
+                await CreationsDB.add(creation);
+                userCreations = await CreationsDB.getAll();
                 renderCreations();
             } catch (err) {
                 creationsView.innerHTML = `<div class="flex flex-col items-center justify-center h-full"><p class="text-red-400 text-[14px]">${err.message}</p></div>`;

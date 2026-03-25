@@ -1541,7 +1541,8 @@ app.post('/api/generate-image', async (req, res) => {
                 cost: 0.04,
                 duration: Date.now() - imgStartTime
             });
-            res.json({ url: `/uploads/${filename}`, revised_prompt: prompt });
+            const dataUrl = `data:image/png;base64,${imgData}`;
+            res.json({ url: dataUrl, revised_prompt: prompt });
         } else {
             // Nano Banana models use generateContent with image response modality
             const { GoogleGenerativeAI } = require('@google/generative-ai');
@@ -1554,12 +1555,17 @@ app.post('/api/generate-image', async (req, res) => {
             // Build content parts - text + optional reference image
             const contentParts = [{ text: prompt }];
             if (referenceImage) {
-                // referenceImage is a URL path like /uploads/img-xxx.png - read the file
-                const refPath = path.join(__dirname, referenceImage);
-                if (fs.existsSync(refPath)) {
-                    const imgBuffer = fs.readFileSync(refPath);
-                    const ext = referenceImage.endsWith('.png') ? 'image/png' : 'image/jpeg';
-                    contentParts.unshift({ inlineData: { mimeType: ext, data: imgBuffer.toString('base64') } });
+                // referenceImage can be a data URL (base64) or a local /uploads/ path
+                const dataUrlMatch = referenceImage.match(/^data:(image\/[^;]+);base64,(.+)$/);
+                if (dataUrlMatch) {
+                    contentParts.unshift({ inlineData: { mimeType: dataUrlMatch[1], data: dataUrlMatch[2] } });
+                } else {
+                    const refPath = path.join(__dirname, referenceImage);
+                    if (fs.existsSync(refPath)) {
+                        const imgBuffer = fs.readFileSync(refPath);
+                        const ext = referenceImage.endsWith('.png') ? 'image/png' : 'image/jpeg';
+                        contentParts.unshift({ inlineData: { mimeType: ext, data: imgBuffer.toString('base64') } });
+                    }
                 }
             }
 
@@ -1595,7 +1601,8 @@ app.post('/api/generate-image', async (req, res) => {
                 cost: 0.04,
                 duration: Date.now() - imgStartTime
             });
-            res.json({ url: `/uploads/${filename}`, revised_prompt: revisedPrompt || prompt });
+            const dataUrl = `data:${imageData.mimeType};base64,${imageData.data}`;
+            res.json({ url: dataUrl, revised_prompt: revisedPrompt || prompt });
         }
     } catch (err) {
         console.error('Image generation error:', err.message);
@@ -1717,7 +1724,8 @@ app.post('/api/generate-video', async (req, res) => {
             duration: Date.now() - vidStartTime
         });
 
-        res.json({ url: `/uploads/${filename}` });
+        const dataUrl = `data:video/mp4;base64,${videoBuffer.toString('base64')}`;
+        res.json({ url: dataUrl });
     } catch (err) {
         console.error('Video generation error:', err.message);
         res.status(500).json({ error: err.message });
