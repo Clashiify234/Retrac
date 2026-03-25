@@ -234,7 +234,7 @@ function resolveProvider(model) {
 // ============ AI Chat Endpoint (streaming) ============
 
 app.post('/api/chat', async (req, res) => {
-    const { model, messages, searchWeb, deepResearch } = req.body;
+    const { model, messages, searchWeb, deepResearch, handwriting } = req.body;
 
     if (!messages || !messages.length) {
         return res.status(400).json({ error: 'No messages provided.' });
@@ -251,11 +251,11 @@ app.post('/api/chat', async (req, res) => {
 
     try {
         if (provider === 'anthropic') {
-            await streamClaude(res, messages, API_KEYS.anthropic, model, searchWeb, deepResearch);
+            await streamClaude(res, messages, API_KEYS.anthropic, model, searchWeb, deepResearch, 0, handwriting);
         } else if (provider === 'google') {
-            await streamGemini(res, messages, API_KEYS.google, model, searchWeb, deepResearch);
+            await streamGemini(res, messages, API_KEYS.google, model, searchWeb, deepResearch, handwriting);
         } else if (provider === 'openai') {
-            await streamOpenAI(res, messages, API_KEYS.openai, model, searchWeb, deepResearch);
+            await streamOpenAI(res, messages, API_KEYS.openai, model, searchWeb, deepResearch, handwriting);
         }
     } catch (err) {
         console.error('Chat error:', err.message);
@@ -266,9 +266,91 @@ app.post('/api/chat', async (req, res) => {
     }
 });
 
+// ============ Multimodal Message Helpers ============
+
+const HANDWRITING_PROMPT = `The user has attached an image that may contain handwritten text. Carefully read and transcribe ALL handwritten text in the image before answering. Pay attention to: messy handwriting, crossed out words, margin notes, arrows, underlines. If it's a worksheet or exam, solve all questions step by step.`;
+
+function isMultimodal(content) {
+    return Array.isArray(content);
+}
+
+function extractTextFromContent(content) {
+    if (typeof content === 'string') return content;
+    if (Array.isArray(content)) {
+        const textPart = content.find(p => p.type === 'text');
+        return textPart ? textPart.text : '';
+    }
+    return '';
+}
+
+function extractImagesFromContent(content) {
+    if (!Array.isArray(content)) return [];
+    return content.filter(p => p.type === 'image');
+}
+
+function convertMessageForClaude(msg) {
+    if (!isMultimodal(msg.content)) {
+        return { role: msg.role === 'assistant' ? 'assistant' : 'user', content: msg.content };
+    }
+    const images = extractImagesFromContent(msg.content);
+    const text = extractTextFromContent(msg.content);
+    const contentParts = [];
+    for (const img of images) {
+        const dataUrl = img.data;
+        const match = dataUrl.match(/^data:(image\/[^;]+);base64,(.+)$/);
+        if (match) {
+            contentParts.push({
+                type: 'image',
+                source: { type: 'base64', media_type: match[1], data: match[2] }
+            });
+        }
+    }
+    if (text) contentParts.push({ type: 'text', text });
+    return { role: msg.role === 'assistant' ? 'assistant' : 'user', content: contentParts };
+}
+
+function convertMessageForGemini(msg) {
+    if (!isMultimodal(msg.content)) {
+        return {
+            role: msg.role === 'assistant' ? 'model' : 'user',
+            parts: [{ text: msg.content }]
+        };
+    }
+    const images = extractImagesFromContent(msg.content);
+    const text = extractTextFromContent(msg.content);
+    const parts = [];
+    for (const img of images) {
+        const dataUrl = img.data;
+        const match = dataUrl.match(/^data:(image\/[^;]+);base64,(.+)$/);
+        if (match) {
+            parts.push({ inlineData: { mimeType: match[1], data: match[2] } });
+        }
+    }
+    if (text) parts.push({ text });
+    return { role: msg.role === 'assistant' ? 'model' : 'user', parts };
+}
+
+function convertMessageForOpenAI(msg) {
+    if (!isMultimodal(msg.content)) {
+        return { role: msg.role, content: msg.content };
+    }
+    const images = extractImagesFromContent(msg.content);
+    const text = extractTextFromContent(msg.content);
+    const contentParts = [];
+    for (const img of images) {
+        contentParts.push({ type: 'image_url', image_url: { url: img.data } });
+    }
+    if (text) contentParts.push({ type: 'text', text });
+    return { role: msg.role, content: contentParts };
+}
+
+function hasAnyImages(messages) {
+    return messages.some(m => isMultimodal(m.content));
+}
+
 // ============ Claude (Anthropic) Streaming ============
 
-async function streamClaude(res, messages, apiKey, modelName, searchWeb, deepResearch, retryCount = 0) {
+async function streamClaude(res, messages, apiKey, modelName, searchWeb, deepResearch, retryCount = 0, handwriting = false) {
     const startTime = Date.now();
     const Anthropic = require('@anthropic-ai/sdk');
     const client = new Anthropic({ apiKey });
@@ -280,12 +362,9 @@ async function streamClaude(res, messages, apiKey, modelName, searchWeb, deepRes
         'Claude Haiku 3.5': 'claude-haiku-4-5-20251001'
     };
     const modelId = modelMap[modelName] || 'claude-sonnet-4-5-20250929';
-    const lastUserMsg = messages[messages.length - 1]?.content || '';
+    const lastUserMsg = extractTextFromContent(messages[messages.length - 1]?.content) || '';
 
-    const anthropicMessages = messages.map(m => ({
-        role: m.role === 'assistant' ? 'assistant' : 'user',
-        content: m.content
-    }));
+    const anthropicMessages = messages.map(m => convertMessageForClaude(m));
 
     try {
         let sources = [];
@@ -444,7 +523,10 @@ Use REAL domains. Return ONLY the raw JSON array.`,
         }
 
         // ====== FINAL PHASE: Generate response ======
-        const systemPrompt = buildSystemPrompt(searchWeb, deepResearch, needsSearch, sources);
+        let systemPrompt = buildSystemPrompt(searchWeb, deepResearch, needsSearch, sources);
+        if (handwriting && hasAnyImages(messages)) {
+            systemPrompt = HANDWRITING_PROMPT + '\n\n' + systemPrompt;
+        }
 
         res.write(`data: ${JSON.stringify({ type: 'thinking', content: needsSearch ? `Writing response based on ${sources.length} sources...` : 'Thinking...' })}\n\n`);
 
@@ -496,7 +578,7 @@ Use REAL domains. Return ONLY the raw JSON array.`,
                 console.log(`API overloaded, retrying in ${waitMs}ms (attempt ${retryCount + 2}/4)...`);
                 res.write(`data: ${JSON.stringify({ type: 'thinking', content: 'Server busy, retrying...' })}\n\n`);
                 await sleep(waitMs);
-                return streamClaude(res, messages, apiKey, modelName, searchWeb, deepResearch, retryCount + 1);
+                return streamClaude(res, messages, apiKey, modelName, searchWeb, deepResearch, retryCount + 1, handwriting);
             }
         }
         throw err;
@@ -505,7 +587,7 @@ Use REAL domains. Return ONLY the raw JSON array.`,
 
 // ============ Gemini (Google) Streaming ============
 
-async function streamGemini(res, messages, apiKey, modelName, searchWeb, deepResearch) {
+async function streamGemini(res, messages, apiKey, modelName, searchWeb, deepResearch, handwriting = false) {
     const startTime = Date.now();
     const { GoogleGenerativeAI } = require('@google/generative-ai');
     const genAI = new GoogleGenerativeAI(apiKey);
@@ -520,9 +602,14 @@ async function streamGemini(res, messages, apiKey, modelName, searchWeb, deepRes
 
     const useGrounding = searchWeb || deepResearch;
 
+    let sysPrompt = buildSystemPrompt(searchWeb, deepResearch, useGrounding, []);
+    if (handwriting && hasAnyImages(messages)) {
+        sysPrompt = HANDWRITING_PROMPT + '\n\n' + sysPrompt;
+    }
+
     const modelConfig = {
         model: modelId,
-        systemInstruction: buildSystemPrompt(searchWeb, deepResearch, useGrounding, [])
+        systemInstruction: sysPrompt
     };
 
     // Enable real Google Search grounding when search is requested
@@ -534,14 +621,12 @@ async function streamGemini(res, messages, apiKey, modelName, searchWeb, deepRes
 
     const history = [];
     for (let i = 0; i < messages.length - 1; i++) {
-        history.push({
-            role: messages[i].role === 'assistant' ? 'model' : 'user',
-            parts: [{ text: messages[i].content }]
-        });
+        history.push(convertMessageForGemini(messages[i]));
     }
 
     const chat = model.startChat({ history });
-    const lastMsg = messages[messages.length - 1].content;
+    const lastGeminiMsg = convertMessageForGemini(messages[messages.length - 1]);
+    const lastMsgParts = lastGeminiMsg.parts;
 
     res.write(`data: ${JSON.stringify({ type: 'thinking', content: useGrounding ? 'Searching the web with Gemini...' : 'Processing with Gemini...' })}\n\n`);
 
@@ -549,7 +634,7 @@ async function streamGemini(res, messages, apiKey, modelName, searchWeb, deepRes
         res.write(`data: ${JSON.stringify({ type: 'activity', activity: 'search', content: 'Searching Google...' })}\n\n`);
     }
 
-    const result = await chat.sendMessageStream(lastMsg);
+    const result = await chat.sendMessageStream(lastMsgParts);
 
     for await (const chunk of result.stream) {
         const text = chunk.text();
@@ -632,7 +717,7 @@ async function streamGemini(res, messages, apiKey, modelName, searchWeb, deepRes
 
 // ============ OpenAI (GPT) Streaming ============
 
-async function streamOpenAI(res, messages, apiKey, modelName, searchWeb, deepResearch) {
+async function streamOpenAI(res, messages, apiKey, modelName, searchWeb, deepResearch, handwriting = false) {
     const startTime = Date.now();
     const OpenAI = require('openai');
     const client = new OpenAI({ apiKey });
@@ -645,10 +730,13 @@ async function streamOpenAI(res, messages, apiKey, modelName, searchWeb, deepRes
     };
     const modelId = modelMap[modelName] || 'gpt-4o';
 
-    const systemPrompt = buildSystemPrompt(searchWeb, deepResearch, false, []);
+    let systemPrompt = buildSystemPrompt(searchWeb, deepResearch, false, []);
+    if (handwriting && hasAnyImages(messages)) {
+        systemPrompt = HANDWRITING_PROMPT + '\n\n' + systemPrompt;
+    }
     const openaiMessages = [
         { role: 'system', content: systemPrompt },
-        ...messages.map(m => ({ role: m.role, content: m.content }))
+        ...messages.map(m => convertMessageForOpenAI(m))
     ];
 
     res.write(`data: ${JSON.stringify({ type: 'thinking', content: 'Thinking...' })}\n\n`);

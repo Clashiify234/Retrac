@@ -10,12 +10,13 @@ const RetracAPI = {
     async streamChat({ model, messages, onThinking, onText, onError, onDone, onActivity, onSources }) {
         const searchWeb = RetracSettings.get('searchWeb') || false;
         const deepResearch = RetracSettings.get('deepResearch') || false;
+        const handwriting = RetracSettings.get('handwriting') || false;
 
         try {
             const response = await fetch(this.baseUrl + '/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ model, messages, searchWeb, deepResearch })
+                body: JSON.stringify({ model, messages, searchWeb, deepResearch, handwriting })
             });
 
             if (!response.ok) {

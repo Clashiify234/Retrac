@@ -9,6 +9,12 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>
+        if (window.pdfjsLib) {
+            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        }
+    </script>
     <script src="js/retrac-api.js"></script>
     <script src="js/chat-ui.js"></script>
     <script src="js/settings-modal.js"></script>
@@ -115,18 +121,91 @@
         .sidebar-collapsed .sidebar-hide { display: none !important; }
         .sidebar-collapsed .sidebar-header { justify-content: center !important; margin-bottom: 16px !important; }
         .sidebar-collapsed .sidebar-header > *:not(.sidebar-logo) { display: none !important; }
-        .sidebar-collapsed nav a { justify-content: center; padding: 8px; }
+        .sidebar-collapsed nav a { justify-content: center; padding: 12px; border-radius: 12px; }
         .sidebar-collapsed nav a span { display: none; }
-        .sidebar-collapsed nav a svg { margin: 0; }
+        .sidebar-collapsed nav a svg { margin: 0; width: 28px; height: 28px; }
         .sidebar-collapsed #sidebar-auth { align-items: center; }
         .sidebar-collapsed #sidebar-auth button { display: none; }
         .sidebar-collapsed #sidebar-auth > div { justify-content: center; }
         .sidebar-collapsed #sidebar-auth > div > div.flex-1 { display: none; }
         .sidebar-collapsed #sidebar-auth .go-pro-card { display: none; }
         aside { transition: width 0.2s ease; }
+    
+        /* ===== RESPONSIVE / MOBILE ===== */
+        /* Prevent iOS zoom on input focus */
+        input, textarea, select { font-size: 16px !important; }
+        /* Fix 100vh on mobile browsers */
+        @supports (height: 100dvh) { body { height: 100dvh; } }
+        /* Smooth scrolling on iOS */
+        * { -webkit-overflow-scrolling: touch; }
+        /* Fix tap highlight */
+        * { -webkit-tap-highlight-color: transparent; }
+
+        /* Tablet */
+        @media (max-width: 1024px) {
+            #sidebar { width: 88px !important; padding: 12px 8px !important; }
+            #sidebar .sidebar-hide { display: none !important; }
+            #sidebar .sidebar-header { justify-content: center; }
+            #sidebar #sidebar-auth { align-items: center; }
+            #sidebar #sidebar-auth button { display: none; }
+            #sidebar #sidebar-auth > div { justify-content: center; }
+            #sidebar #sidebar-auth > div > div.flex-1 { display: none; }
+            #sidebar #sidebar-auth .go-pro-card { display: none; }
+            #sidebar nav { gap: 4px !important; }
+            #sidebar nav a { flex-direction: column; justify-content: center; align-items: center; padding: 10px 4px; border-radius: 12px; gap: 4px !important; }
+            #sidebar nav a span { display: block !important; font-size: 10px !important; opacity: 0.7; text-align: center; line-height: 1.2; }
+            #sidebar nav a svg { margin: 0; width: 24px; height: 24px; }
+            .mobile-menu-btn { display: none !important; }
+        }
+
+        /* Mobile */
+        @media (max-width: 768px) {
+            #sidebar {
+                position: fixed !important;
+                left: -300px;
+                top: 0;
+                height: 100vh;
+                z-index: 1000;
+                width: 280px !important;
+                transition: left 0.3s ease;
+            }
+            #sidebar.mobile-open { left: 0; }
+            #sidebar .sidebar-hide { display: flex !important; }
+            #sidebar .sidebar-header { justify-content: space-between; }
+            #sidebar #sidebar-auth > div > div.flex-1 { display: block; }
+            #sidebar nav a { justify-content: flex-start; padding: 8px 12px; }
+            #sidebar nav a span { display: inline; }
+
+            .mobile-backdrop {
+                display: none;
+                position: fixed;
+                top: 0; left: 0; right: 0; bottom: 0;
+                background: rgba(0,0,0,0.5);
+                z-index: 999;
+            }
+            .mobile-backdrop.active { display: block; }
+            .mobile-menu-btn { display: flex !important; }
+        }
+
+        @media (max-width: 768px) {
+            .chat-input-wrapper, #prompt-form { padding: 8px !important; }
+            #chat-input { font-size: 16px !important; }
+            .message-bubble { max-width: 95% !important; padding: 12px !important; }
+            .welcome-title { font-size: 24px !important; }
+            .dropdown-menu { right: 0 !important; left: auto !important; min-width: 200px !important; }
+            #attached-files-wrapper { max-width: calc(100vw - 100px) !important; }
+            #model-selector-btn span { max-width: 80px; overflow: hidden; text-overflow: ellipsis; }
+        }
+
     </style>
 </head>
 <body class="antialiased">
+
+<button class="mobile-menu-btn" style="display:none;position:fixed;top:12px;left:12px;z-index:998;background:#232323;border:1px solid #333;border-radius:8px;padding:8px;color:white;cursor:pointer;">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+</button>
+<div class="mobile-backdrop" id="mobile-backdrop"></div>
+
 
     <!-- Sidebar -->
     <aside id="sidebar" class="w-[280px] h-full bg-[#171717] flex flex-col p-4 border-r border-[#2a2a2a] shrink-0">
@@ -375,7 +454,7 @@
                     <!-- Left Controls -->
                     <div class="flex items-center gap-1.5">
                         <!-- Plus Button -->
-                        <input type="file" id="file-input" multiple class="hidden" />
+                        <input type="file" id="file-input" multiple accept="image/*,.pdf" class="hidden" />
                         <button onclick="document.getElementById('file-input').click()" class="p-2 text-[#9ca3af] hover:text-white transition-colors rounded-full hover:bg-[#3f3f3f]">
                             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                                 <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -511,13 +590,22 @@
                                 </button>
 
                                 <!-- Deep Research -->
-                                <button id="deep-research-btn" class="w-full flex items-center gap-3 px-4 py-3 hover:bg-[#353535] transition-colors border-b border-[#3e3e3e]">
+                                <button id="deep-research-btn" class="w-full flex items-center gap-3 px-4 py-3 hover:bg-[#353535] transition-colors">
                                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                         <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path>
                                         <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path>
                                     </svg>
                                     <span class="text-white text-[14px]">Deep research</span>
                                     <svg class="ml-auto hidden" id="deep-research-check" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                </button>
+
+                                <!-- Handwriting Recognition -->
+                                <button id="handwriting-btn" class="w-full flex items-center gap-3 px-4 py-3 hover:bg-[#353535] transition-colors border-b border-[#3e3e3e]">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
+                                    </svg>
+                                    <span class="text-white text-[14px]">Handwriting</span>
+                                    <svg class="ml-auto hidden" id="handwriting-check" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
                                 </button>
 
                                 <!-- Create Image -->
@@ -1409,7 +1497,9 @@
             // Only accept file drops, not text
             if (!e.dataTransfer || !e.dataTransfer.files.length) return;
             for (const file of e.dataTransfer.files) {
-                if (file.type.startsWith('image/')) {
+                if (file.type === 'application/pdf') {
+                    handlePdfFile(file);
+                } else if (file.type.startsWith('image/')) {
                     addImagePill(file);
                 } else {
                     addFilePill(file.name);
@@ -1733,9 +1823,14 @@
             }
         });
 
-        document.getElementById('file-input').addEventListener('change', (e) => {
+        // Global attached file data array for sending to API
+        let attachedFileData = [];
+
+        document.getElementById('file-input').addEventListener('change', async (e) => {
             for (const file of e.target.files) {
-                if (file.type.startsWith('image/')) {
+                if (file.type === 'application/pdf') {
+                    await handlePdfFile(file);
+                } else if (file.type.startsWith('image/')) {
                     addImagePill(file);
                 } else {
                     addFilePill(file.name);
@@ -1793,13 +1888,40 @@
             setTimeout(updateScrollBtns, 50);
         }
 
-        function addImagePill(file) {
+        function resizeImageToBase64(file, maxDim = 2048) {
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        let { width, height } = img;
+                        if (width > maxDim || height > maxDim) {
+                            const scale = maxDim / Math.max(width, height);
+                            width = Math.round(width * scale);
+                            height = Math.round(height * scale);
+                        }
+                        const canvas = document.createElement('canvas');
+                        canvas.width = width;
+                        canvas.height = height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, width, height);
+                        resolve(canvas.toDataURL('image/png'));
+                    };
+                    img.src = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+
+        function addImagePill(file, base64Override = null) {
             attachedWrapper.classList.remove('hidden');
             attachedWrapper.classList.add('flex');
 
-            const url = URL.createObjectURL(file);
+            const url = base64Override || URL.createObjectURL(file);
             const pill = document.createElement('div');
+            const fileIndex = attachedFileData.length;
             pill.className = 'group/file relative shrink-0 cursor-pointer';
+            pill.dataset.fileIndex = fileIndex;
             pill.innerHTML = `
                 <img src="${url}" class="w-16 h-16 object-cover rounded-xl border-2 border-[#505050] hover:border-[#888] transition-colors" />
                 <button class="absolute top-1 right-1 w-5 h-5 bg-black/60 hover:bg-red-500 rounded-full flex items-center justify-center text-white opacity-0 group-hover/file:opacity-100 transition-all cursor-pointer z-10 backdrop-blur-sm">
@@ -1808,13 +1930,89 @@
             `;
             pill.querySelector('button').addEventListener('click', (e) => {
                 e.stopPropagation();
-                URL.revokeObjectURL(url);
+                if (!base64Override) URL.revokeObjectURL(url);
+                const idx = parseInt(pill.dataset.fileIndex);
+                attachedFileData = attachedFileData.filter((_, i) => i !== idx);
+                // Re-index remaining pills
+                attachedFiles.querySelectorAll('[data-file-index]').forEach((p, i) => p.dataset.fileIndex = i);
                 pill.remove();
                 updateScrollBtns();
             });
-            pill.addEventListener('click', () => openImagePopup(url, file.name));
+            pill.addEventListener('click', () => openImagePopup(url, file.name || 'image'));
             attachedFiles.appendChild(pill);
             setTimeout(updateScrollBtns, 50);
+
+            // Read file as base64 and store
+            if (base64Override) {
+                attachedFileData.push({ type: 'image', name: file.name || 'image.png', base64: base64Override });
+            } else {
+                resizeImageToBase64(file).then(base64 => {
+                    attachedFileData[fileIndex] = { type: 'image', name: file.name, base64 };
+                });
+            }
+        }
+
+        function showToast(message, duration = 3000) {
+            const toast = document.createElement('div');
+            toast.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:10px 20px;border-radius:12px;font-size:14px;z-index:99999;opacity:0;transition:opacity 0.3s;box-shadow:0 4px 20px rgba(0,0,0,0.4);';
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            requestAnimationFrame(() => toast.style.opacity = '1');
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                setTimeout(() => toast.remove(), 300);
+            }, duration);
+        }
+
+        async function handlePdfFile(file) {
+            if (!window.pdfjsLib) {
+                showToast('PDF support is loading, please try again...');
+                return;
+            }
+            try {
+                const arrayBuffer = await file.arrayBuffer();
+                const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+                const totalPages = pdf.numPages;
+                const maxPages = Math.min(totalPages, 10);
+
+                if (totalPages > 10) {
+                    showToast(`PDF has ${totalPages} pages. Loading first 10 pages only.`, 4000);
+                }
+
+                for (let i = 1; i <= maxPages; i++) {
+                    const page = await pdf.getPage(i);
+                    const scale = 2;
+                    const viewport = page.getViewport({ scale });
+                    const canvas = document.createElement('canvas');
+                    canvas.width = viewport.width;
+                    canvas.height = viewport.height;
+                    const ctx = canvas.getContext('2d');
+                    await page.render({ canvasContext: ctx, viewport }).promise;
+
+                    // Resize if too large
+                    let base64;
+                    const maxDim = 2048;
+                    if (canvas.width > maxDim || canvas.height > maxDim) {
+                        const resizeScale = maxDim / Math.max(canvas.width, canvas.height);
+                        const resizedCanvas = document.createElement('canvas');
+                        resizedCanvas.width = Math.round(canvas.width * resizeScale);
+                        resizedCanvas.height = Math.round(canvas.height * resizeScale);
+                        const rCtx = resizedCanvas.getContext('2d');
+                        rCtx.drawImage(canvas, 0, 0, resizedCanvas.width, resizedCanvas.height);
+                        base64 = resizedCanvas.toDataURL('image/png');
+                    } else {
+                        base64 = canvas.toDataURL('image/png');
+                    }
+
+                    const pageName = `${file.name} - Page ${i}`;
+                    addImagePill({ name: pageName }, base64);
+                }
+
+                showToast(`PDF loaded: ${maxPages} page${maxPages > 1 ? 's' : ''}`);
+            } catch (err) {
+                console.error('PDF render error:', err);
+                showToast('Failed to load PDF. It may be corrupted or password-protected.');
+            }
         }
 
         function openImagePopup(src, name) {
@@ -1945,14 +2143,26 @@
         function handleSendMessage() {
             if (!requireAuth()) return;
             const text = chatInput.value.trim();
-            if (!text || RetracChatUI.isStreaming) return;
+            if (!text && attachedFileData.length === 0) return;
+            if (RetracChatUI.isStreaming) return;
 
             // Handle image/video generation in chat
             if (createImageEnabled || createVideoEnabled) {
                 handleInChatGeneration(text);
                 return;
             }
-            RetracChatUI.sendMessage(text);
+
+            const filesToSend = [...attachedFileData];
+            attachedFileData = [];
+            // Clear pill UI
+            attachedFiles.innerHTML = '';
+            const attachedWrapper2 = document.getElementById('attached-files-wrapper');
+            if (attachedWrapper2) {
+                attachedWrapper2.classList.add('hidden');
+                attachedWrapper2.classList.remove('flex');
+            }
+
+            RetracChatUI.sendMessage(text, filesToSend);
         }
 
         // Track last generated media for follow-up edits
@@ -2084,6 +2294,18 @@
             deepResearchCheck.classList.toggle('hidden', !deepResearchEnabled);
         });
 
+        // Handwriting toggle
+        let handwritingEnabled = false;
+        const handwritingBtn = document.getElementById('handwriting-btn');
+        const handwritingCheck = document.getElementById('handwriting-check');
+
+        handwritingBtn?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            handwritingEnabled = !handwritingEnabled;
+            RetracSettings.set('handwriting', handwritingEnabled);
+            handwritingCheck.classList.toggle('hidden', !handwritingEnabled);
+        });
+
         // Create Image / Video toggles
         let createImageEnabled = false;
         let createVideoEnabled = false;
@@ -2138,5 +2360,33 @@
 
         // Auth guards handled globally by auth-modal.js
     </script>
+
+<script>
+    // Mobile menu
+    const mobileMenuBtn = document.querySelector('.mobile-menu-btn');
+    const mobileBackdrop = document.getElementById('mobile-backdrop');
+    if (mobileMenuBtn) {
+        mobileMenuBtn.addEventListener('click', () => {
+            const sb = document.getElementById('sidebar');
+            sb.classList.toggle('mobile-open');
+            mobileBackdrop.classList.toggle('active');
+        });
+        mobileBackdrop?.addEventListener('click', () => {
+            const sb = document.getElementById('sidebar');
+            sb.classList.remove('mobile-open');
+            mobileBackdrop.classList.remove('active');
+        });
+        document.querySelectorAll('#sidebar nav a').forEach(link => {
+            link.addEventListener('click', () => {
+                if (window.innerWidth <= 768) {
+                    const sb = document.getElementById('sidebar');
+                    sb.classList.remove('mobile-open');
+                    mobileBackdrop.classList.remove('active');
+                }
+            });
+        });
+    }
+
+</script>
 </body>
 </html>

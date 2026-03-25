@@ -28,9 +28,9 @@
         .sidebar-collapsed .sidebar-hide { display: none !important; }
         .sidebar-collapsed .sidebar-header { justify-content: center !important; margin-bottom: 16px !important; }
         .sidebar-collapsed .sidebar-header > *:not(.sidebar-logo) { display: none !important; }
-        .sidebar-collapsed nav a { justify-content: center; padding: 8px; }
+        .sidebar-collapsed nav a { justify-content: center; padding: 12px; border-radius: 12px; }
         .sidebar-collapsed nav a span { display: none; }
-        .sidebar-collapsed nav a svg { margin: 0; }
+        .sidebar-collapsed nav a svg { margin: 0; width: 28px; height: 28px; }
         .sidebar-collapsed #sidebar-auth { align-items: center; }
         .sidebar-collapsed #sidebar-auth button { display: none; }
         .sidebar-collapsed #sidebar-auth > div { justify-content: center; }
@@ -104,6 +104,61 @@
             font-family: 'Inter', sans-serif;
             font-size: 24px;
             line-height: 1.3;
+            min-width: 40px;
+            min-height: 1.3em;
+            outline: none;
+        }
+
+        .text-overlay.editing {
+            cursor: text !important;
+            user-select: text !important;
+            -webkit-user-select: text !important;
+        }
+        .text-overlay.editing:active {
+            cursor: text !important;
+        }
+        .text-overlay.editing .text-overlay-inner {
+            cursor: text !important;
+            user-select: text !important;
+            -webkit-user-select: text !important;
+        }
+
+        /* Floating color toolbar */
+        .color-toolbar {
+            position: absolute;
+            display: none;
+            background: #222;
+            border: 1px solid #444;
+            border-radius: 10px;
+            padding: 6px 8px;
+            gap: 5px;
+            z-index: 100;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+            align-items: center;
+        }
+        .color-toolbar.visible {
+            display: flex;
+        }
+        .color-toolbar .color-dot {
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            border: 2px solid transparent;
+            cursor: pointer;
+            transition: transform 0.15s, border-color 0.15s;
+        }
+        .color-toolbar .color-dot:hover {
+            transform: scale(1.15);
+            border-color: #888;
+        }
+        .color-toolbar .color-dot.active {
+            border-color: #fff;
+        }
+        .color-toolbar .separator {
+            width: 1px;
+            height: 20px;
+            background: #444;
+            margin: 0 4px;
         }
 
         /* Drop zone placeholder */
@@ -226,7 +281,7 @@
             border-color: #6366f1;
         }
 
-        .overlay-item textarea.overlay-text {
+        .overlay-item .overlay-text {
             background: #1e1e1e;
             border: 1px solid #444;
             border-radius: 6px;
@@ -237,13 +292,19 @@
             width: 100%;
             outline: none;
             transition: border-color 0.15s;
-            resize: vertical;
             min-height: 36px;
             max-height: 120px;
             line-height: 1.4;
+            box-sizing: border-box;
+            cursor: text;
         }
 
-        .overlay-item textarea.overlay-text:focus {
+        .overlay-item .overlay-text:empty::before {
+            content: attr(data-placeholder);
+            color: #666;
+        }
+
+        .overlay-item .overlay-text:focus {
             border-color: #6366f1;
         }
 
@@ -409,9 +470,78 @@
             text-align: center;
             padding: 12px;
         }
+    
+        /* ===== RESPONSIVE / MOBILE ===== */
+        /* Prevent iOS zoom on input focus */
+        input, textarea, select { font-size: 16px !important; }
+        /* Fix 100vh on mobile browsers */
+        @supports (height: 100dvh) { body { height: 100dvh; } }
+        /* Smooth scrolling on iOS */
+        * { -webkit-overflow-scrolling: touch; }
+        /* Fix tap highlight */
+        * { -webkit-tap-highlight-color: transparent; }
+
+        /* Tablet */
+        @media (max-width: 1024px) {
+            #sidebar { width: 88px !important; padding: 12px 8px !important; }
+            #sidebar .sidebar-hide { display: none !important; }
+            #sidebar .sidebar-header { justify-content: center; }
+            #sidebar #sidebar-auth { align-items: center; }
+            #sidebar #sidebar-auth button { display: none; }
+            #sidebar #sidebar-auth > div { justify-content: center; }
+            #sidebar #sidebar-auth > div > div.flex-1 { display: none; }
+            #sidebar #sidebar-auth .go-pro-card { display: none; }
+            #sidebar nav { gap: 4px !important; }
+            #sidebar nav a { flex-direction: column; justify-content: center; align-items: center; padding: 10px 4px; border-radius: 12px; gap: 4px !important; }
+            #sidebar nav a span { display: block !important; font-size: 10px !important; opacity: 0.7; text-align: center; line-height: 1.2; }
+            #sidebar nav a svg { margin: 0; width: 24px; height: 24px; }
+            .mobile-menu-btn { display: none !important; }
+        }
+
+        /* Mobile */
+        @media (max-width: 768px) {
+            #sidebar {
+                position: fixed !important;
+                left: -300px;
+                top: 0;
+                height: 100vh;
+                z-index: 1000;
+                width: 280px !important;
+                transition: left 0.3s ease;
+            }
+            #sidebar.mobile-open { left: 0; }
+            #sidebar .sidebar-hide { display: flex !important; }
+            #sidebar .sidebar-header { justify-content: space-between; }
+            #sidebar #sidebar-auth > div > div.flex-1 { display: block; }
+            #sidebar nav a { justify-content: flex-start; padding: 8px 12px; }
+            #sidebar nav a span { display: inline; }
+
+            .mobile-backdrop {
+                display: none;
+                position: fixed;
+                top: 0; left: 0; right: 0; bottom: 0;
+                background: rgba(0,0,0,0.5);
+                z-index: 999;
+            }
+            .mobile-backdrop.active { display: block; }
+            .mobile-menu-btn { display: flex !important; }
+        }
+
+        @media (max-width: 768px) {
+            .finalize-layout { flex-direction: column !important; }
+            .canvas-area { width: 100% !important; min-height: 50vh; }
+            .controls-panel { width: 100% !important; max-height: 40vh; overflow-y: auto; }
+        }
+
     </style>
 </head>
 <body class="antialiased">
+
+<button class="mobile-menu-btn" style="display:none;position:fixed;top:12px;left:12px;z-index:998;background:#232323;border:1px solid #333;border-radius:8px;padding:8px;color:white;cursor:pointer;">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+</button>
+<div class="mobile-backdrop" id="mobile-backdrop"></div>
+
 
     <!-- Sidebar -->
     <aside id="sidebar" class="w-[280px] h-full bg-[#171717] flex flex-col p-4 border-r border-[#2a2a2a] shrink-0">
@@ -503,6 +633,19 @@
                     <div id="image-wrapper" class="image-wrapper" style="display: none;">
                         <img id="preview-image" src="" alt="Preview" draggable="false">
                         <!-- Text overlays will be added here dynamically -->
+                    </div>
+                    <!-- Floating color toolbar for selected text -->
+                    <div id="color-toolbar" class="color-toolbar">
+                        <div class="color-dot" data-color="#000000" style="background:#000000;" title="Black"></div>
+                        <div class="color-dot" data-color="#ffffff" style="background:#ffffff;" title="White"></div>
+                        <div class="color-dot" data-color="#ef4444" style="background:#ef4444;" title="Red"></div>
+                        <div class="color-dot" data-color="#f97316" style="background:#f97316;" title="Orange"></div>
+                        <div class="color-dot" data-color="#eab308" style="background:#eab308;" title="Yellow"></div>
+                        <div class="color-dot" data-color="#22c55e" style="background:#22c55e;" title="Green"></div>
+                        <div class="color-dot" data-color="#3b82f6" style="background:#3b82f6;" title="Blue"></div>
+                        <div class="color-dot" data-color="#8b5cf6" style="background:#8b5cf6;" title="Purple"></div>
+                        <div class="separator"></div>
+                        <div class="color-dot" data-color="#6366f1" style="background:linear-gradient(135deg,#f97316,#ec4899,#8b5cf6);border:2px solid #555;" title="Custom..."></div>
                     </div>
                 </div>
             </div>
@@ -980,6 +1123,12 @@
             // Position it centered
             positionOverlayElement(el, overlay);
 
+            // Double-click to edit text directly on image
+            el.addEventListener('dblclick', (e) => {
+                e.stopPropagation();
+                enterEditMode(el, overlay);
+            });
+
             // Create list item in controls
             renderOverlayList();
 
@@ -1053,10 +1202,16 @@
         function updateOverlayText(overlay) {
             const el = imageWrapper.querySelector('[data-overlay-id="' + overlay.id + '"]');
             if (!el) return;
-            el.querySelector('.text-overlay-inner').innerHTML = escapeHtml(overlay.text);
+            // If we have rich HTML (with colors), use that; otherwise plain text
+            if (overlay.richHtml) {
+                el.querySelector('.text-overlay-inner').innerHTML = overlay.richHtml;
+            } else {
+                el.querySelector('.text-overlay-inner').innerHTML = escapeHtml(overlay.text);
+            }
         }
 
         function deleteOverlay(id) {
+            exitEditMode();
             overlays = overlays.filter(o => o.id !== id);
             const el = imageWrapper.querySelector('[data-overlay-id="' + id + '"]');
             if (el) el.remove();
@@ -1066,6 +1221,165 @@
             }
             renderOverlayList();
         }
+
+        // ==================== Inline Edit Mode ====================
+        let editingOverlayEl = null;
+        const colorToolbar = document.getElementById('color-toolbar');
+
+        function enterEditMode(el, overlay) {
+            if (editingOverlayEl === el) return;
+            exitEditMode();
+
+            editingOverlayEl = el;
+            const inner = el.querySelector('.text-overlay-inner');
+            el.classList.add('editing');
+            inner.contentEditable = 'true';
+
+            // Small delay to ensure contentEditable is active before focusing
+            setTimeout(() => {
+                inner.focus();
+                const sel = window.getSelection();
+                const range = document.createRange();
+                range.selectNodeContents(inner);
+                range.collapse(false);
+                sel.removeAllRanges();
+                sel.addRange(range);
+            }, 50);
+
+            // Disable drag while editing
+            el.dataset.editMode = 'true';
+
+            // Sync changes back
+            inner.oninput = () => {
+                overlay.text = inner.textContent;
+                overlay.richHtml = inner.innerHTML;
+            };
+        }
+
+        function exitEditMode() {
+            if (!editingOverlayEl) return;
+            const inner = editingOverlayEl.querySelector('.text-overlay-inner');
+            inner.contentEditable = 'false';
+            inner.oninput = null;
+            editingOverlayEl.classList.remove('editing');
+            editingOverlayEl.dataset.editMode = 'false';
+            editingOverlayEl = null;
+            hideColorToolbar();
+            renderOverlayList();
+        }
+
+        // Global: check for text selection inside an editing overlay
+        document.addEventListener('mouseup', () => {
+            if (editingOverlayEl) {
+                setTimeout(showColorToolbarIfSelection, 10);
+            }
+        });
+        document.addEventListener('keyup', () => {
+            if (editingOverlayEl) {
+                showColorToolbarIfSelection();
+            }
+        });
+
+        function showColorToolbarIfSelection() {
+            const sel = window.getSelection();
+            if (!sel || sel.isCollapsed || !sel.toString().trim() || !editingOverlayEl) {
+                hideColorToolbar();
+                return;
+            }
+
+            // Make sure selection is inside the editing overlay
+            const inner = editingOverlayEl.querySelector('.text-overlay-inner');
+            if (!inner.contains(sel.anchorNode)) {
+                hideColorToolbar();
+                return;
+            }
+
+            // Position toolbar above the selection
+            const range = sel.getRangeAt(0);
+            const rect = range.getBoundingClientRect();
+            const parentRect = imageWrapper.parentElement.getBoundingClientRect();
+
+            let left = rect.left - parentRect.left + rect.width / 2 - 120;
+            let top = rect.top - parentRect.top - 48;
+
+            // Keep toolbar in bounds
+            left = Math.max(8, Math.min(left, parentRect.width - 260));
+            top = Math.max(8, top);
+
+            colorToolbar.style.left = left + 'px';
+            colorToolbar.style.top = top + 'px';
+            colorToolbar.classList.add('visible');
+        }
+
+        function hideColorToolbar() {
+            colorToolbar.classList.remove('visible');
+        }
+
+        // Color dot clicks
+        colorToolbar.querySelectorAll('.color-dot').forEach(dot => {
+            dot.addEventListener('mousedown', (e) => {
+                e.preventDefault(); // Prevent losing selection
+                const color = dot.dataset.color;
+
+                if (dot.title === 'Custom...') {
+                    // Custom color picker
+                    const picker = document.createElement('input');
+                    picker.type = 'color';
+                    picker.value = '#6366f1';
+                    picker.style.position = 'absolute';
+                    picker.style.opacity = '0';
+                    document.body.appendChild(picker);
+                    picker.addEventListener('input', () => {
+                        applyColorToSelection(picker.value);
+                    });
+                    picker.addEventListener('change', () => {
+                        picker.remove();
+                    });
+                    picker.click();
+                    return;
+                }
+
+                applyColorToSelection(color);
+            });
+        });
+
+        function applyColorToSelection(color) {
+            const sel = window.getSelection();
+            if (!sel || sel.isCollapsed) return;
+
+            // Wrap selected text in a span with the color
+            const range = sel.getRangeAt(0);
+            const span = document.createElement('span');
+            span.style.color = color;
+
+            try {
+                range.surroundContents(span);
+            } catch (e) {
+                // If selection crosses element boundaries, use execCommand fallback
+                document.execCommand('foreColor', false, color);
+            }
+
+            // Update the overlay data to store the rich HTML
+            if (editingOverlayEl) {
+                const inner = editingOverlayEl.querySelector('.text-overlay-inner');
+                const overlayId = parseInt(editingOverlayEl.dataset.overlayId);
+                const overlay = overlays.find(o => o.id === overlayId);
+                if (overlay) {
+                    overlay.richHtml = inner.innerHTML;
+                    overlay.text = inner.textContent;
+                    renderOverlayList();
+                }
+            }
+
+            hideColorToolbar();
+        }
+
+        // Click outside to exit edit mode
+        document.addEventListener('mousedown', (e) => {
+            if (editingOverlayEl && !editingOverlayEl.contains(e.target) && !colorToolbar.contains(e.target)) {
+                exitEditMode();
+            }
+        });
 
         function selectOverlay(id) {
             selectedOverlayId = id;
@@ -1126,25 +1440,27 @@
                 const topRow = document.createElement('div');
                 topRow.style.cssText = 'display: flex; align-items: center; gap: 8px;';
 
-                const textInput = document.createElement('textarea');
+                const textInput = document.createElement('div');
                 textInput.className = 'overlay-text';
-                textInput.value = overlay.text;
-                textInput.placeholder = 'Enter text...';
-                textInput.rows = 1;
+                textInput.contentEditable = 'true';
+                textInput.textContent = overlay.text;
+                textInput.setAttribute('data-placeholder', 'Enter text...');
                 textInput.style.flex = '1';
-                textInput.addEventListener('input', (e) => {
-                    overlay.text = e.target.value;
-                    // Auto-resize textarea
-                    e.target.style.height = 'auto';
-                    e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
+                textInput.style.minHeight = '36px';
+                textInput.style.maxHeight = '120px';
+                textInput.style.overflowY = 'auto';
+                textInput.style.whiteSpace = 'pre-wrap';
+                textInput.style.wordBreak = 'break-word';
+                textInput.addEventListener('input', () => {
+                    overlay.text = textInput.textContent;
                     updateOverlayText(overlay);
                 });
                 textInput.addEventListener('focus', () => {
                     selectOverlay(overlay.id);
                 });
                 textInput.addEventListener('keydown', (e) => {
-                    // Allow Enter for new lines (don't let it propagate)
                     if (e.key === 'Enter') e.stopPropagation();
+                    if (e.key === 'Backspace' || e.key === 'Delete') e.stopPropagation();
                 });
 
                 const deleteBtn = document.createElement('button');
@@ -1209,6 +1525,16 @@
         // ==================== Overlay Drag & Drop ====================
         function setupOverlayDrag(el, overlay) {
             el.addEventListener('mousedown', (e) => {
+                // Don't drag while editing text
+                if (el.dataset.editMode === 'true') return;
+
+                // If already selected, second click enters edit mode
+                if (selectedOverlayId === overlay.id && !draggingOverlay) {
+                    e.stopPropagation();
+                    enterEditMode(el, overlay);
+                    return;
+                }
+
                 e.preventDefault();
                 e.stopPropagation();
                 selectOverlay(overlay.id);
@@ -1417,22 +1743,64 @@
                     drawRoundedRect(ctx, bgX, bgY, natOvW, natOvH, scaledRadius);
                     ctx.fill();
 
-                    // Draw text (supports multi-line)
-                    ctx.fillStyle = '#000000';
+                    // Draw text (supports multi-line + colored spans)
                     ctx.font = '700 ' + scaledFontSize + 'px Inter, sans-serif';
                     ctx.textBaseline = 'middle';
-                    ctx.textAlign = 'center';
-                    const lines = text.split('\n');
+
+                    const innerEl = el.querySelector('.text-overlay-inner');
+                    const segments = parseColorSegments(innerEl);
                     const lineHeight = scaledFontSize * 1.4;
-                    const totalTextH = lines.length * lineHeight;
+
+                    // Group segments into lines
+                    const segLines = [[]];
+                    segments.forEach(seg => {
+                        const parts = seg.text.split('\n');
+                        parts.forEach((part, pi) => {
+                            if (pi > 0) segLines.push([]);
+                            if (part) segLines[segLines.length - 1].push({ text: part, color: seg.color });
+                        });
+                    });
+
+                    const totalTextH = segLines.length * lineHeight;
                     const startY = bgY + (natOvH - totalTextH) / 2 + lineHeight / 2;
-                    lines.forEach((line, i) => {
-                        ctx.fillText(line, bgX + natOvW / 2, startY + i * lineHeight);
+
+                    segLines.forEach((segs, li) => {
+                        let lineW = 0;
+                        segs.forEach(s => { lineW += ctx.measureText(s.text).width; });
+                        let curX = bgX + (natOvW - lineW) / 2;
+                        segs.forEach(seg => {
+                            ctx.fillStyle = seg.color || '#000000';
+                            ctx.textAlign = 'left';
+                            ctx.fillText(seg.text, curX, startY + li * lineHeight);
+                            curX += ctx.measureText(seg.text).width;
+                        });
                     });
                 });
 
                 resolve(canvas.toDataURL('image/png'));
             });
+        }
+
+        // Parse colored text segments from contenteditable HTML
+        function parseColorSegments(el) {
+            const segments = [];
+            function walk(node, color) {
+                if (node.nodeType === 3) { // text node
+                    if (node.textContent) segments.push({ text: node.textContent, color: color });
+                } else if (node.nodeType === 1) { // element
+                    const nodeColor = node.style.color || color;
+                    if (node.tagName === 'BR') {
+                        segments.push({ text: '\n', color: color });
+                    } else if (node.tagName === 'FONT' && node.color) {
+                        // execCommand foreColor uses <font> tags
+                        for (const child of node.childNodes) walk(child, node.color);
+                    } else {
+                        for (const child of node.childNodes) walk(child, nodeColor);
+                    }
+                }
+            }
+            walk(el, '#000000');
+            return segments;
         }
 
         function drawRoundedRect(ctx, x, y, w, h, r) {
@@ -1590,7 +1958,7 @@
         // ==================== Keyboard Shortcuts ====================
         document.addEventListener('keydown', (e) => {
             // Delete selected overlay with Delete/Backspace (when not focused on input)
-            if ((e.key === 'Delete' || e.key === 'Backspace') && selectedOverlayId && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
+            if ((e.key === 'Delete' || e.key === 'Backspace') && selectedOverlayId && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA' && !document.activeElement.isContentEditable) {
                 e.preventDefault();
                 deleteOverlay(selectedOverlayId);
             }
@@ -1603,5 +1971,34 @@
 
     })();
     </script>
+
+<script>
+    // Mobile menu
+    const mobileMenuBtn = document.querySelector('.mobile-menu-btn');
+    const mobileBackdrop = document.getElementById('mobile-backdrop');
+    if (mobileMenuBtn) {
+        mobileMenuBtn.addEventListener('click', () => {
+            const sb = document.getElementById('sidebar');
+            sb.classList.toggle('mobile-open');
+            mobileBackdrop.classList.toggle('active');
+        });
+        mobileBackdrop?.addEventListener('click', () => {
+            const sb = document.getElementById('sidebar');
+            sb.classList.remove('mobile-open');
+            mobileBackdrop.classList.remove('active');
+        });
+        document.querySelectorAll('#sidebar nav a').forEach(link => {
+            link.addEventListener('click', () => {
+                if (window.innerWidth <= 768) {
+                    const sb = document.getElementById('sidebar');
+                    sb.classList.remove('mobile-open');
+                    mobileBackdrop.classList.remove('active');
+                }
+            });
+        });
+    }
+
+</script>
 </body>
 </html>
+            

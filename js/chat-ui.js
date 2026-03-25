@@ -85,12 +85,13 @@ const RetracChatUI = {
         // Switch to chat view
         this.showChatView();
 
-        // Add user message to storage
+        // Add user message to storage (text only for history persistence)
         RetracChatHistory.addMessage(this.currentChat.id, 'user', text);
         this._refreshCurrentChat(); // sync in-memory with localStorage
 
-        // Render user message
-        this.renderUserMessage(text, files);
+        // Render user message with file thumbnails
+        const fileNames = files.map(f => f.name);
+        this.renderUserMessage(text, fileNames);
 
         // Clear input
         if (this.textarea) {
@@ -107,6 +108,17 @@ const RetracChatUI = {
         // Safety: ensure at least the current user message is present
         if (apiMessages.length === 0) {
             apiMessages.push({ role: 'user', content: text });
+        }
+
+        // If this message has files, convert the last user message to multimodal format
+        if (files.length > 0) {
+            const lastMsg = apiMessages[apiMessages.length - 1];
+            if (lastMsg && lastMsg.role === 'user') {
+                lastMsg.content = [
+                    ...files.map(f => ({ type: 'image', data: f.base64 })),
+                    { type: 'text', text: lastMsg.content || text }
+                ];
+            }
         }
 
         // Create assistant message container
