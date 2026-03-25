@@ -347,7 +347,9 @@ app.post('/api/chat', async (req, res) => {
                 || (err.message && (err.message.includes('503') || err.message.includes('429')
                 || err.message.includes('Service Unavailable') || err.message.includes('Overloaded')
                 || err.message.includes('high demand') || err.message.includes('rate limit')
-                || err.message.includes('quota')));
+                || err.message.includes('quota') || err.message.includes('Ollama')
+                || err.message.includes('ECONNREFUSED') || err.message.includes('fetch failed')
+                || err.message.includes('network') || err.message.includes('timeout')));
 
             if (!isRetryable || i === modelsToTry.length - 1) {
                 // Not retryable or last model in chain - give up
