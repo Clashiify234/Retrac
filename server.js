@@ -15,52 +15,57 @@ const API_KEYS = {
     google: process.env.GOOGLE_API_KEY || ''
 };
 
-// ============ Ollama Config ============
-// OLLAMA_URL: Set this to your Cloudflare Tunnel URL when deploying to Render
-// e.g. OLLAMA_URL=https://ollama.yourdomain.com
-// Leave empty or localhost for local development
-const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
-const IS_REMOTE_OLLAMA = OLLAMA_URL !== 'http://localhost:11434';
-let ollamaAvailable = null; // null = unknown, true/false = cached result
-let ollamaLastCheck = 0;
-const OLLAMA_CHECK_INTERVAL = IS_REMOTE_OLLAMA ? 60000 : 30000; // remote tunnels: check less often
-const OLLAMA_TIMEOUT = IS_REMOTE_OLLAMA ? 10000 : 3000; // remote tunnels: longer timeout
+// ============ RetracLocal API Config ============
+// LOCAL_API_URL: Your RetracLocal server URL (Cloudflare Tunnel for production)
+// e.g. LOCAL_API_URL=https://retrac-local.yourdomain.com
+const LOCAL_API_URL = process.env.LOCAL_API_URL || 'http://localhost:3456';
+const LOCAL_API_KEY = process.env.LOCAL_API_KEY || '';
+const IS_REMOTE_LOCAL = !LOCAL_API_URL.includes('localhost');
+let localApiAvailable = null;
+let localApiLastCheck = 0;
+const LOCAL_CHECK_INTERVAL = IS_REMOTE_LOCAL ? 60000 : 30000;
+const LOCAL_TIMEOUT = IS_REMOTE_LOCAL ? 10000 : 5000;
 
-async function isOllamaAvailable() {
+async function isLocalApiAvailable() {
     const now = Date.now();
-    if (ollamaAvailable !== null && (now - ollamaLastCheck) < OLLAMA_CHECK_INTERVAL) {
-        return ollamaAvailable;
+    if (localApiAvailable !== null && (now - localApiLastCheck) < LOCAL_CHECK_INTERVAL) {
+        return localApiAvailable;
     }
     try {
+        const headers = {};
+        if (LOCAL_API_KEY) headers['x-api-key'] = LOCAL_API_KEY;
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), OLLAMA_TIMEOUT);
-        const res = await fetch(OLLAMA_URL + '/api/tags', { signal: controller.signal });
+        const timeout = setTimeout(() => controller.abort(), LOCAL_TIMEOUT);
+        const res = await fetch(`${LOCAL_API_URL}/api/status`, { headers, signal: controller.signal });
         clearTimeout(timeout);
-        ollamaAvailable = res.ok;
-        if (IS_REMOTE_OLLAMA) console.log(`[Ollama] Remote tunnel check: ${ollamaAvailable ? 'connected' : 'unreachable'} (${OLLAMA_URL})`);
+        const data = await res.json();
+        localApiAvailable = data.online === true;
+        if (IS_REMOTE_LOCAL) console.log(`[RetracLocal] Remote check: ${localApiAvailable ? 'connected' : 'unreachable'} (${LOCAL_API_URL})`);
     } catch (err) {
-        ollamaAvailable = false;
-        if (IS_REMOTE_OLLAMA) console.log(`[Ollama] Remote tunnel unreachable: ${err.message}`);
+        localApiAvailable = false;
+        if (IS_REMOTE_LOCAL) console.log(`[RetracLocal] Unreachable: ${err.message}`);
     }
-    ollamaLastCheck = now;
-    return ollamaAvailable;
+    localApiLastCheck = now;
+    return localApiAvailable;
 }
 
-// API endpoint to check Ollama status (used by frontend)
+// API endpoint to check local models status (used by frontend)
 app.get('/api/ollama-status', async (req, res) => {
-    const available = await isOllamaAvailable();
+    const available = await isLocalApiAvailable();
     let models = [];
     if (available) {
         try {
+            const headers = {};
+            if (LOCAL_API_KEY) headers['x-api-key'] = LOCAL_API_KEY;
             const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), OLLAMA_TIMEOUT);
-            const r = await fetch(OLLAMA_URL + '/api/tags', { signal: controller.signal });
+            const timeout = setTimeout(() => controller.abort(), LOCAL_TIMEOUT);
+            const r = await fetch(`${LOCAL_API_URL}/api/status`, { headers, signal: controller.signal });
             clearTimeout(timeout);
             const data = await r.json();
-            models = (data.models || []).map(m => m.name);
+            models = Object.entries(data.models || {}).filter(([, v]) => v).map(([k]) => k);
         } catch {}
     }
-    res.json({ available, url: IS_REMOTE_OLLAMA ? '(remote tunnel)' : OLLAMA_URL, models });
+    res.json({ available, url: IS_REMOTE_LOCAL ? '(remote tunnel)' : LOCAL_API_URL, models });
 });
 
 app.use(cors());
@@ -272,7 +277,7 @@ const upload = multer({ storage, limits: { fileSize: 50 * 1024 * 1024 } });
 // ============ Resolve which provider + key to use ============
 
 function resolveProvider(model) {
-    // Ollama local models (no API key needed)
+    // Local models via RetracLocal (no cloud API key needed)
     if (model === 'Smart Ensemble') return 'ensemble';
     if (model.startsWith('Qwen') || model.startsWith('Mistral') || model.startsWith('Phi-3') || model.startsWith('GLM-4') || model === 'DeepSeek V3 16B' || model.startsWith('Llama 3')) return 'ollama';
     // Cloud providers
@@ -354,7 +359,7 @@ app.post('/api/chat', async (req, res) => {
                 || (err.message && (err.message.includes('503') || err.message.includes('429')
                 || err.message.includes('Service Unavailable') || err.message.includes('Overloaded')
                 || err.message.includes('high demand') || err.message.includes('rate limit')
-                || err.message.includes('quota') || err.message.includes('Ollama')
+                || err.message.includes('quota') || err.message.includes('RetracLocal')
                 || err.message.includes('ECONNREFUSED') || err.message.includes('fetch failed')
                 || err.message.includes('network') || err.message.includes('timeout')));
 
@@ -885,103 +890,82 @@ async function streamOpenAI(res, messages, apiKey, modelName, searchWeb, deepRes
     res.end();
 }
 
-// ============ Ollama (Local) Streaming ============
+// ============ Local Models Streaming (via RetracLocal API) ============
 
 async function streamOllama(res, messages, modelName, searchWeb, deepResearch, handwriting = false) {
     const startTime = Date.now();
-    const http = require('http');
 
-    const modelMap = {
-        'Qwen 3 14B': 'qwen3:14b',
-        'Mistral 7B': 'mistral:7b',
-        'Phi-3 14B': 'phi3:14b',
-        'GLM-4 9B': 'glm4:9b',
-        'DeepSeek V3 16B': 'deepseek-v3:16b',
-        'Llama 3.2': 'llama3.2'
-    };
-    const modelId = modelMap[modelName] || 'qwen3:14b';
+    // Proxy to RetracLocal API
+    const headers = { 'Content-Type': 'application/json' };
+    if (LOCAL_API_KEY) headers['x-api-key'] = LOCAL_API_KEY;
 
-    // Local models get a simpler system prompt - they can't handle the full complex one
-    const localSystemPrompt = `You are Retrac AI, a helpful and intelligent assistant. Follow these rules:
+    const apiMessages = messages.map(m => ({
+        role: m.role === 'assistant' ? 'assistant' : 'user',
+        content: typeof m.content === 'string' ? m.content : extractTextFromContent(m.content)
+    }));
 
-1. **Auto-detect the user's language** and respond in the same language naturally. If they write German, respond in German. If English, respond in English.
-2. **Match the user's energy**: Greeting → short greeting back. Simple question → direct answer. Complex question → detailed answer.
-3. **Be direct and useful**. No filler phrases like "Great question!" or "Sure!". Just answer.
-4. **For homework/school tasks**: Give clean, numbered answers matching the task structure. No drama, no essays. Just solve correctly.
-5. **For lists/hooks/ideas**: Number them, make each item specific and complete. Add brief explanation why each works.
-6. **For creative writing**: Just write it. No meta-commentary.
-7. **Have strong opinions** backed by evidence. Don't hedge with "it depends" without explaining what it depends on.
-8. **Use markdown** for formatting: **bold** for emphasis, ## for headers, numbered lists, code blocks.
-9. **Be concise but complete**. Every sentence should add value.`;
-
-    const ollamaMessages = [
-        { role: 'system', content: localSystemPrompt },
-        ...messages.map(m => ({
-            role: m.role === 'assistant' ? 'assistant' : 'user',
-            content: typeof m.content === 'string' ? m.content : extractTextFromContent(m.content)
-        }))
-    ];
-
-    res.write(`data: ${JSON.stringify({ type: 'thinking', content: `Processing with ${modelName}${IS_REMOTE_OLLAMA ? ' (remote)' : ' (local)'}...` })}\n\n`);
-
-    // Retry logic for remote tunnel connections
-    let ollamaRes;
-    const maxRetries = IS_REMOTE_OLLAMA ? 2 : 0;
+    let localRes;
+    const maxRetries = IS_REMOTE_LOCAL ? 2 : 0;
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
         try {
-            ollamaRes = await fetch(`${OLLAMA_URL}/api/chat`, {
+            localRes = await fetch(`${LOCAL_API_URL}/api/chat`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ model: modelId, messages: ollamaMessages, stream: true })
+                headers,
+                body: JSON.stringify({ model: modelName, messages: apiMessages })
             });
             break;
         } catch (err) {
-            if (attempt === maxRetries) throw new Error(`Ollama tunnel unreachable after ${maxRetries + 1} attempts: ${err.message}`);
-            if (IS_REMOTE_OLLAMA) console.log(`[Ollama] Retry ${attempt + 1}/${maxRetries} for ${modelName}...`);
+            if (attempt === maxRetries) throw new Error(`RetracLocal unreachable after ${maxRetries + 1} attempts: ${err.message}`);
+            if (IS_REMOTE_LOCAL) console.log(`[RetracLocal] Retry ${attempt + 1}/${maxRetries} for ${modelName}...`);
             await new Promise(r => setTimeout(r, 1000));
         }
     }
 
-    if (!ollamaRes.ok) throw new Error(`Ollama error: ${ollamaRes.status}`);
+    if (!localRes.ok) {
+        const errData = await localRes.json().catch(() => ({ error: `RetracLocal error: ${localRes.status}` }));
+        throw new Error(errData.error || `RetracLocal error: ${localRes.status}`);
+    }
 
-    const reader = ollamaRes.body.getReader ? ollamaRes.body.getReader() : null;
-    if (reader) {
-        const decoder = new TextDecoder();
-        let buffer = '';
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split('\n');
-            buffer = lines.pop();
-            for (const line of lines) {
-                if (!line.trim()) continue;
+    // Stream SSE from RetracLocal directly to the client
+    const reader = localRes.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop();
+        for (const line of lines) {
+            if (!line.trim()) continue;
+            if (line.startsWith('data: ')) {
+                const data = line.slice(6);
+                if (data === '[DONE]') {
+                    logUsage({
+                        provider: 'ollama', model: modelName, modelDisplay: modelName, type: 'chat',
+                        inputTokens: 0, outputTokens: 0, cost: 0, duration: Date.now() - startTime
+                    });
+                    res.write('data: [DONE]\n\n');
+                    return res.end();
+                }
                 try {
-                    const json = JSON.parse(line);
-                    if (json.message?.content) {
-                        res.write(`data: ${JSON.stringify({ type: 'text', content: json.message.content })}\n\n`);
-                    }
-                    if (json.done) {
+                    const parsed = JSON.parse(data);
+                    // Capture usage data from RetracLocal
+                    if (parsed.type === 'usage') {
                         logUsage({
-                            provider: 'ollama', model: modelId, modelDisplay: modelName, type: 'chat',
-                            inputTokens: json.prompt_eval_count || 0, outputTokens: json.eval_count || 0,
+                            provider: 'ollama', model: modelName, modelDisplay: modelName, type: 'chat',
+                            inputTokens: parsed.input_tokens || 0, outputTokens: parsed.output_tokens || 0,
                             cost: 0, duration: Date.now() - startTime
                         });
+                    } else {
+                        // Forward all other events (thinking, text, activity, error) as-is
+                        res.write(line + '\n\n');
                     }
-                } catch {}
-            }
-        }
-    } else {
-        // Fallback for Node < 18 ReadableStream
-        const text = await ollamaRes.text();
-        for (const line of text.split('\n')) {
-            if (!line.trim()) continue;
-            try {
-                const json = JSON.parse(line);
-                if (json.message?.content) {
-                    res.write(`data: ${JSON.stringify({ type: 'text', content: json.message.content })}\n\n`);
+                } catch {
+                    res.write(line + '\n\n');
                 }
-            } catch {}
+            }
         }
     }
     res.write('data: [DONE]\n\n');
@@ -991,183 +975,8 @@ async function streamOllama(res, messages, modelName, searchWeb, deepResearch, h
 // ============ Smart Ensemble (Multi-Model) Streaming ============
 
 async function streamEnsemble(res, messages, searchWeb, deepResearch, handwriting = false) {
-    const startTime = Date.now();
-    const http = require('http');
-
-    // Step 1: ROUTER - analyze the question to pick specialists
-    const lastMsg = typeof messages[messages.length - 1].content === 'string'
-        ? messages[messages.length - 1].content
-        : extractTextFromContent(messages[messages.length - 1].content);
-
-    res.write(`data: ${JSON.stringify({ type: 'thinking', content: 'Analyzing question...' })}\n\n`);
-    res.write(`data: ${JSON.stringify({ type: 'activity', activity: 'search', content: 'Routing to specialists...' })}\n\n`);
-
-    // Use a quick local model call to classify
-    const routerPrompt = `Classify this question into categories. Pick the 3 most relevant from: [general, creative, math, code, science, language, analysis, summary]. Return ONLY a JSON array of 3 strings. Question: "${lastMsg.substring(0, 500)}"`;
-
-    let categories = ['general', 'creative', 'analysis']; // default
-    try {
-        const routerRes = await fetch(`${OLLAMA_URL}/api/generate`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                model: 'mistral:7b',
-                prompt: routerPrompt,
-                stream: false
-            })
-        });
-        const routerData = await routerRes.json();
-        const parsed = JSON.parse(routerData.response.match(/\[.*\]/)?.[0] || '["general","creative","analysis"]');
-        if (Array.isArray(parsed) && parsed.length >= 2) categories = parsed.slice(0, 3);
-    } catch (e) {
-        console.warn('Router fallback to defaults:', e.message);
-    }
-
-    // Map categories to specialist models
-    const specialistMap = {
-        'general': 'qwen3:14b',
-        'creative': 'qwen3:14b',
-        'math': 'qwen3:14b',
-        'code': 'glm4:9b',
-        'science': 'phi3:14b',
-        'language': 'qwen3:14b',
-        'analysis': 'qwen3:14b',
-        'summary': 'mistral:7b'
-    };
-
-    const specialistNames = {
-        'qwen3:14b': 'Qwen 3 14B',
-        'glm4:9b': 'GLM-4 9B',
-        'phi3:14b': 'Phi-3 14B',
-        'mistral:7b': 'Mistral 7B'
-    };
-
-    // Get unique models for the selected categories
-    const selectedModels = [...new Set(categories.map(c => specialistMap[c] || 'qwen3:14b'))];
-    // Ensure we have at least 2 different models, max 3
-    if (selectedModels.length < 2) selectedModels.push('mistral:7b');
-    const models = selectedModels.slice(0, 3);
-
-    res.write(`data: ${JSON.stringify({ type: 'activity', activity: 'search', content: `Selected specialists: ${models.map(m => specialistNames[m]).join(', ')}` })}\n\n`);
-
-    // Step 2: Query each specialist (sequentially since only 1 GPU)
-    const responses = [];
-    const systemPrompt = `You are a helpful AI assistant. Respond in the same language as the user. Be direct, accurate, and concise. Use markdown formatting.`;
-
-    for (let i = 0; i < models.length; i++) {
-        const model = models[i];
-        const name = specialistNames[model];
-        res.write(`data: ${JSON.stringify({ type: 'thinking', content: `${name} is thinking... (${i + 1}/${models.length})` })}\n\n`);
-        res.write(`data: ${JSON.stringify({ type: 'activity', activity: 'evaluate', content: `Querying ${name}...` })}\n\n`);
-
-        try {
-            const ollamaRes = await fetch(`${OLLAMA_URL}/api/chat`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    model: model,
-                    messages: [
-                        { role: 'system', content: systemPrompt },
-                        ...messages.map(m => ({
-                            role: m.role === 'assistant' ? 'assistant' : 'user',
-                            content: typeof m.content === 'string' ? m.content : extractTextFromContent(m.content)
-                        }))
-                    ],
-                    stream: false
-                })
-            });
-            const data = await ollamaRes.json();
-            responses.push({ model: name, response: data.message?.content || '' });
-        } catch (e) {
-            console.warn(`Ensemble: ${name} failed:`, e.message);
-            responses.push({ model: name, response: '' });
-        }
-    }
-
-    // Step 3: JUDGE - combine the best parts
-    res.write(`data: ${JSON.stringify({ type: 'thinking', content: 'Judge is combining results...' })}\n\n`);
-    res.write(`data: ${JSON.stringify({ type: 'activity', activity: 'evaluate', content: 'Combining best answers...' })}\n\n`);
-
-    const validResponses = responses.filter(r => r.response.length > 0);
-
-    if (validResponses.length === 0) {
-        res.write(`data: ${JSON.stringify({ type: 'text', content: 'Ensemble failed - no models responded. Make sure Ollama is running with the required models.' })}\n\n`);
-        res.write('data: [DONE]\n\n');
-        res.end();
-        return;
-    }
-
-    if (validResponses.length === 1) {
-        // Only one model responded, stream it directly
-        res.write(`data: ${JSON.stringify({ type: 'text', content: validResponses[0].response })}\n\n`);
-        res.write('data: [DONE]\n\n');
-        res.end();
-        return;
-    }
-
-    const judgePrompt = `You are a Judge AI. You received answers from ${validResponses.length} specialist AI models to the same question. Your job:
-1. Identify the BEST parts of each answer
-2. Combine them into ONE superior answer
-3. Fix any errors or contradictions
-4. Write the final answer in the same language as the original question
-5. Do NOT mention that multiple models were used. Just write the best possible answer.
-
-ORIGINAL QUESTION: "${lastMsg}"
-
-${validResponses.map((r, i) => `--- ANSWER FROM ${r.model} ---\n${r.response}\n`).join('\n')}
-
-Now write the FINAL combined answer:`;
-
-    // Stream the judge's response
-    const judgeRes = await fetch(`${OLLAMA_URL}/api/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: 'qwen3:14b', messages: [{ role: 'user', content: judgePrompt }], stream: true })
-    });
-
-    if (!judgeRes.ok) throw new Error(`Ollama judge error: ${judgeRes.status}`);
-
-    const judgeReader = judgeRes.body.getReader ? judgeRes.body.getReader() : null;
-    if (judgeReader) {
-        const decoder = new TextDecoder();
-        let buffer = '';
-        while (true) {
-            const { done, value } = await judgeReader.read();
-            if (done) break;
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split('\n');
-            buffer = lines.pop();
-            for (const line of lines) {
-                if (!line.trim()) continue;
-                try {
-                    const json = JSON.parse(line);
-                    if (json.message?.content) {
-                        res.write(`data: ${JSON.stringify({ type: 'text', content: json.message.content })}\n\n`);
-                    }
-                    if (json.done) {
-                        logUsage({
-                            provider: 'ollama', model: 'ensemble', modelDisplay: 'Smart Ensemble', type: 'chat',
-                            inputTokens: json.prompt_eval_count || 0, outputTokens: json.eval_count || 0,
-                            cost: 0, duration: Date.now() - startTime
-                        });
-                    }
-                } catch {}
-            }
-        }
-    } else {
-        const text = await judgeRes.text();
-        for (const line of text.split('\n')) {
-            if (!line.trim()) continue;
-            try {
-                const json = JSON.parse(line);
-                if (json.message?.content) {
-                    res.write(`data: ${JSON.stringify({ type: 'text', content: json.message.content })}\n\n`);
-                }
-            } catch {}
-        }
-    }
-    res.write('data: [DONE]\n\n');
-    res.end();
+    // Smart Ensemble runs entirely on RetracLocal — just proxy the SSE stream
+    return streamOllama(res, messages, 'Smart Ensemble', searchWeb, deepResearch, handwriting);
 }
 
 // ============ System Prompt Builder ============
