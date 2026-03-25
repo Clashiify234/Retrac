@@ -53,5 +53,38 @@
     "outputTokens": 0,
     "cost": 0.04,
     "duration": 6293
+  },
+  {
+    "timestamp": 1774428438740,
+    "provider": "anthropic",
+    "model": "claude-sonnet-4-5-20250929",
+    "modelDisplay": "Claude Haiku 4.5",
+    "type": "chat",
+    "inputTokens": 4482,
+    "outputTokens": 23,
+    "cost": 0.013791,
+    "duration": 1722
+  },
+  {
+    "timestamp": 1774428471522,
+    "provider": "anthropic",
+    "model": "claude-haiku-4-5-20251001",
+    "modelDisplay": "Claude Haiku 4.5",
+    "type": "chat",
+    "inputTokens": 4509,
+    "outputTokens": 12,
+    "cost": 0.0036552,
+    "duration": 1081
+  },
+  {
+    "timestamp": 1774428483575,
+    "provider": "anthropic",
+    "model": "claude-haiku-4-5-20251001",
+    "modelDisplay": "Claude Haiku 4.5",
+    "type": "chat",
+    "inputTokens": 4525,
+    "outputTokens": 14,
+    "cost": 0.0036760000000000004,
+    "duration": 900
   }
 ]

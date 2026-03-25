@@ -5,7 +5,7 @@ const RetracChatUI = {
     chatContainer: null,
     scrollContainer: null,
     textarea: null,
-    currentModel: 'Gemini 3 Pro',
+    currentModel: 'Claude Haiku 4.5',
     isStreaming: false,
     currentChat: null,
     attachedFiles: [],
@@ -566,6 +566,7 @@ const RetracChatUI = {
         const icons = {
             'Claude Opus 4': '<img src="https://raw.githubusercontent.com/lobehub/lobe-icons/refs/heads/master/packages/static-png/dark/claude-color.png" width="18" height="18" />',
             'Claude Sonnet 4.5': '<img src="https://raw.githubusercontent.com/lobehub/lobe-icons/refs/heads/master/packages/static-png/dark/claude-color.png" width="18" height="18" />',
+            'Claude Haiku 4.5': '<img src="https://raw.githubusercontent.com/lobehub/lobe-icons/refs/heads/master/packages/static-png/dark/claude-color.png" width="18" height="18" />',
             'Gemini 3 Pro': '<img src="https://raw.githubusercontent.com/lobehub/lobe-icons/refs/heads/master/packages/static-png/dark/gemini-color.png" width="18" height="18" />',
             'GPT-5.1': '<img src="https://img.icons8.com/ios11/512/FFFFFF/chatgpt.png" width="18" height="18" />',
             'GPT-5.2': '<img src="https://img.icons8.com/ios11/512/FFFFFF/chatgpt.png" width="18" height="18" />'
