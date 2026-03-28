@@ -2380,7 +2380,13 @@
                     result = await RetracAPI.generateVideo(prompt, 'Veo 3 Fast', '16:9', 5);
                 } else {
                     // Pass the last generated image as reference for editing
-                    result = await RetracAPI.generateImageLocal(prompt, '1:1');
+                    // Try local Juggernaut XL first, fall back to cloud
+                    try {
+                        result = await RetracAPI.generateImageLocal(prompt, '1:1');
+                        if (result.error) throw new Error(result.error);
+                    } catch (e) {
+                        result = await RetracAPI.generateImage(prompt, 'Nano Banana', '1:1', lastGeneratedImage);
+                    }
                 }
 
                 if (result.error) throw new Error(result.error);

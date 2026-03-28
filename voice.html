@@ -1120,6 +1120,7 @@
             addHistoryBubble('user', text);
             addHistoryBubble('assistant', smartResponse);
             // Detect type for logging
+            const lower = text.toLowerCase();
             const lt = lower.includes('timer') ? 'timer' : lower.includes('wetter') || lower.includes('regn') ? 'weather' : lower.includes('erinner') ? 'reminder' : 'ask';
             logChat(text, smartResponse, lt);
             logActivity(text, lt);
