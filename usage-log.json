@@ -1560,5 +1560,27 @@
     "outputTokens": 0,
     "cost": 0,
     "duration": 14218
+  },
+  {
+    "timestamp": 1774738978486,
+    "provider": "local",
+    "model": "wan2.1-1.3b",
+    "modelDisplay": "Wan 2.1",
+    "type": "video",
+    "inputTokens": 0,
+    "outputTokens": 0,
+    "cost": 0,
+    "duration": 119435
+  },
+  {
+    "timestamp": 1774739411776,
+    "provider": "local",
+    "model": "wan2.1-1.3b",
+    "modelDisplay": "Wan 2.1",
+    "type": "video",
+    "inputTokens": 0,
+    "outputTokens": 0,
+    "cost": 0,
+    "duration": 119573
   }
 ]

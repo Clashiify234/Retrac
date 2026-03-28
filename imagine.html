@@ -401,6 +401,32 @@
     <script>
         // Auth provided by auth-modal.js
 
+        // ========== Image Upload for Image-to-Video ==========
+        let uploadedImageData = null;
+
+        document.getElementById('img-file-input').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file || !file.type.startsWith('image/')) return;
+            const reader = new FileReader();
+            reader.onload = () => {
+                uploadedImageData = reader.result;
+                // Show preview
+                let preview = document.getElementById('upload-preview');
+                if (!preview) {
+                    preview = document.createElement('div');
+                    preview.id = 'upload-preview';
+                    preview.style.cssText = 'position:relative;display:inline-block;margin-bottom:4px;';
+                    document.getElementById('img-prompt').parentNode.insertBefore(preview, document.getElementById('img-prompt'));
+                }
+                preview.innerHTML = `
+                    <img src="${reader.result}" style="max-height:80px;border-radius:8px;border:1px solid #444;">
+                    <button onclick="uploadedImageData=null;this.parentNode.remove();" style="position:absolute;top:-6px;right:-6px;background:#333;border:1px solid #555;color:white;border-radius:50%;width:20px;height:20px;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;">×</button>
+                `;
+            };
+            reader.readAsDataURL(file);
+            e.target.value = '';
+        });
+
         // ========== Current Mode ==========
         let currentMode = 'image'; // 'image' or 'video'
 
@@ -458,6 +484,8 @@
                     <button class="img-model-opt w-full text-left px-4 py-2.5 text-[14px] rounded-lg hover:bg-[#333] transition-colors text-[#888]" data-model="Veo 3">Veo 3</button>
                     <button class="img-model-opt w-full text-left px-4 py-2.5 text-[14px] rounded-lg hover:bg-[#333] transition-colors text-[#888]" data-model="Veo 3 Fast">Veo 3 Fast</button>
                     <button class="img-model-opt w-full text-left px-4 py-2.5 text-[14px] rounded-lg hover:bg-[#333] transition-colors text-[#888]" data-model="Veo 3.1">Veo 3.1</button>
+                    <div class="border-t border-[#444] my-1 mx-2"></div>
+                    <button class="img-model-opt w-full text-left px-4 py-2.5 text-[14px] rounded-lg hover:bg-[#333] transition-colors text-[#888]" data-model="Wan 2.1">⚡ Wan 2.1</button>
                 `;
                 modelLabel.textContent = 'Veo 2';
                 rebindModelOpts();
@@ -790,7 +818,9 @@
                 const selectedModel = document.getElementById('img-model-label').textContent;
                 const duration = parseInt(document.getElementById('img-duration-label').textContent);
 
-                const result = await RetracAPI.generateVideo(prompt, selectedModel, ratio, duration);
+                const result = selectedModel === 'Wan 2.1'
+                    ? await RetracAPI.generateVideoLocal(prompt, ratio, uploadedImageData)
+                    : await RetracAPI.generateVideo(prompt, selectedModel, ratio, duration);
                 if (result.error) {
                     creationsView.innerHTML = `<div class="flex flex-col items-center justify-center h-full"><p class="text-red-400 text-[14px]">${result.error}</p></div>`;
                     return;

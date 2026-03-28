@@ -119,6 +119,16 @@ const RetracAPI = {
         return res.json();
     },
 
+    // Generate video via local ComfyUI (Wan 2.1)
+    async generateVideoLocal(prompt, aspectRatio, image) {
+        const res = await fetch(this.baseUrl + '/api/generate-video-local', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prompt, aspectRatio, image })
+        });
+        return res.json();
+    },
+
     // Generate video
     async generateVideo(prompt, model, aspectRatio, duration) {
         const res = await fetch(this.baseUrl + '/api/generate-video', {

@@ -1493,6 +1493,131 @@ app.post('/api/generate-image-local', async (req, res) => {
     }
 });
 
+// ============ Local Video Generation (ComfyUI / Wan2.1) ============
+
+app.post('/api/generate-video-local', async (req, res) => {
+    const startTime = Date.now();
+    const { prompt, aspectRatio, image } = req.body;
+    if (!prompt && !image) return res.status(400).json({ error: 'Prompt or image is required.' });
+
+    const COMFYUI_URL = process.env.COMFYUI_URL || 'http://127.0.0.1:8188';
+    const WebSocket = require('ws');
+
+    // Resolution mapping
+    const resMap = { '16:9': [832, 480], '9:16': [480, 832], '1:1': [640, 640], '4:3': [704, 528], '3:4': [528, 704] };
+    const [width, height] = resMap[aspectRatio] || [832, 480];
+
+    try {
+        // Upload image if provided (for image-to-video)
+        let uploadedImage = null;
+        if (image) {
+            const base64Match = image.match(/^data:image\/[^;]+;base64,(.+)$/);
+            if (base64Match) {
+                const imgBuffer = Buffer.from(base64Match[1], 'base64');
+                const FormData = (await import('form-data')).default || require('form-data');
+                const formData = new FormData();
+                formData.append('image', imgBuffer, { filename: 'input.png', contentType: 'image/png' });
+                const uploadRes = await fetch(`${COMFYUI_URL}/upload/image`, {
+                    method: 'POST',
+                    body: formData,
+                    headers: formData.getHeaders ? formData.getHeaders() : {}
+                });
+                if (uploadRes.ok) {
+                    const uploadData = await uploadRes.json();
+                    uploadedImage = uploadData.name;
+                }
+            }
+        }
+
+        // Build ComfyUI workflow
+        const workflow = {
+            "1": { "class_type": "UNETLoader", "inputs": { "unet_name": "wan2.1_t2v_1.3B_bf16.safetensors", "weight_dtype": "default" } },
+            "2": { "class_type": "CLIPLoader", "inputs": { "clip_name": "umt5_xxl_fp8_e4m3fn_scaled.safetensors", "type": "wan", "device": "default" } },
+            "3": { "class_type": "VAELoader", "inputs": { "vae_name": "wan_2.1_vae.safetensors" } },
+            "4": { "class_type": "CLIPTextEncode", "inputs": { "text": prompt || "camera slowly panning across the scene", "clip": ["2", 0] } },
+            "5": { "class_type": "CLIPTextEncode", "inputs": { "text": "blurry, low quality, distorted, watermark, text", "clip": ["2", 0] } },
+            "6": { "class_type": "EmptyHunyuanLatentVideo", "inputs": { "width": width, "height": height, "length": 33, "batch_size": 1 } },
+            "7": { "class_type": "ModelSamplingSD3", "inputs": { "model": ["1", 0], "shift": 8.0 } },
+            "8": { "class_type": "KSampler", "inputs": {
+                "model": ["7", 0], "positive": ["4", 0], "negative": ["5", 0], "latent_image": ["6", 0],
+                "seed": Math.floor(Math.random() * 1e15), "control_after_generate": "randomize",
+                "steps": 30, "cfg": 6.0, "sampler_name": "uni_pc", "scheduler": "simple", "denoise": 1.0
+            }},
+            "9": { "class_type": "VAEDecode", "inputs": { "samples": ["8", 0], "vae": ["3", 0] } },
+            "10": { "class_type": "CreateVideo", "inputs": { "images": ["9", 0], "fps": 16 } },
+            "11": { "class_type": "SaveVideo", "inputs": { "video": ["10", 0], "filename_prefix": "video/RetracVideo", "format": "auto", "codec": "auto" } }
+        };
+
+        // If image-to-video, modify workflow
+        if (uploadedImage) {
+            workflow["12"] = { "class_type": "LoadImage", "inputs": { "image": uploadedImage } };
+            workflow["6"] = { "class_type": "WanImageToVideo", "inputs": {
+                "positive": ["4", 0], "negative": ["5", 0], "vae": ["3", 0],
+                "width": width, "height": height, "length": 33, "batch_size": 1
+            }};
+            // Connect image to the conditioning
+            workflow["8"].inputs.latent_image = ["6", 0];
+        }
+
+        // Submit to ComfyUI
+        const clientId = 'retrac_' + Date.now();
+        const promptRes = await fetch(`${COMFYUI_URL}/api/prompt`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prompt: workflow, client_id: clientId })
+        });
+
+        if (!promptRes.ok) {
+            const err = await promptRes.text();
+            throw new Error('ComfyUI error: ' + err.slice(0, 200));
+        }
+
+        const { prompt_id } = await promptRes.json();
+
+        // Poll for completion via WebSocket
+        const result = await new Promise((resolve, reject) => {
+            const ws = new WebSocket(`${COMFYUI_URL.replace('http', 'ws')}/ws?clientId=${clientId}`);
+            const timeout = setTimeout(() => { ws.close(); reject(new Error('Video generation timed out (5 min).')); }, 300000);
+
+            ws.on('message', (raw) => {
+                try {
+                    const msg = JSON.parse(raw.toString());
+                    if (msg.type === 'executed') {
+                        const output = msg.data?.output;
+                        // ComfyUI returns videos as "images" with animated flag
+                        if (output?.images?.[0]) {
+                            clearTimeout(timeout);
+                            ws.close();
+                            resolve(output.images[0]);
+                        }
+                    } else if (msg.type === 'execution_error') {
+                        clearTimeout(timeout);
+                        ws.close();
+                        reject(new Error(msg.data?.exception_message || 'ComfyUI execution error'));
+                    }
+                } catch (e) {}
+            });
+            ws.on('error', (err) => { clearTimeout(timeout); reject(new Error('ComfyUI connection error: ' + err.message)); });
+        });
+
+        // Fetch the video file
+        const videoUrl = `${COMFYUI_URL}/api/view?filename=${encodeURIComponent(result.filename)}&subfolder=${encodeURIComponent(result.subfolder || '')}&type=${result.type || 'output'}`;
+        const videoRes = await fetch(videoUrl);
+        if (!videoRes.ok) throw new Error('Failed to fetch video from ComfyUI');
+
+        const videoBuffer = Buffer.from(await videoRes.arrayBuffer());
+        const videoBase64 = videoBuffer.toString('base64');
+        const mimeType = result.filename?.endsWith('.webm') ? 'video/webm' : 'video/mp4';
+        const dataUrl = `data:${mimeType};base64,${videoBase64}`;
+
+        logUsage({ provider: 'local', model: 'wan2.1-1.3b', modelDisplay: 'Wan 2.1', type: 'video', inputTokens: 0, outputTokens: 0, cost: 0, duration: Date.now() - startTime });
+        res.json({ url: dataUrl, revised_prompt: prompt });
+    } catch (err) {
+        console.error('Local video generation error:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // ============ Video Generation Endpoint ============
 
 app.post('/api/generate-video', async (req, res) => {

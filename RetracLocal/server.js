@@ -144,7 +144,14 @@ app.get('/api/status', async (req, res) => {
             available[name] = installed.some(m => m.startsWith(baseId));
         }
 
-        res.json({ online: true, models: available, ollama: OLLAMA_URL });
+        // Check media backends
+        let fooocusOnline = false, comfyuiOnline = false;
+        try { const r = await fetch(`${FOOOCUS_URL}/docs`, { signal: AbortSignal.timeout(2000) }); fooocusOnline = r.ok; } catch {}
+        try { const r = await fetch(`${COMFYUI_URL}/api/object_info`, { signal: AbortSignal.timeout(2000) }); comfyuiOnline = r.ok; } catch {}
+        if (fooocusOnline) available['Juggernaut XL'] = true;
+        if (comfyuiOnline) available['Wan 2.1'] = true;
+
+        res.json({ online: true, models: available, ollama: OLLAMA_URL, media: { fooocus: fooocusOnline, comfyui: comfyuiOnline } });
     } catch {
         res.json({ online: false, models: {}, ollama: OLLAMA_URL });
     }
@@ -543,6 +550,128 @@ app.get('/api/system', (req, res) => {
     });
 });
 
+// ============ Local Image Generation (Fooocus-API / Juggernaut XL) ============
+
+const FOOOCUS_URL = process.env.FOOOCUS_URL || 'http://127.0.0.1:8888';
+const COMFYUI_URL = process.env.COMFYUI_URL || 'http://127.0.0.1:8188';
+
+app.get('/api/media-status', async (req, res) => {
+    let fooocus = false, comfyui = false;
+    try { const r = await fetch(`${FOOOCUS_URL}/docs`, { signal: AbortSignal.timeout(3000) }); fooocus = r.ok; } catch {}
+    try { const r = await fetch(`${COMFYUI_URL}/api/object_info`, { signal: AbortSignal.timeout(3000) }); comfyui = r.ok; } catch {}
+    res.json({ fooocus, comfyui, models: {
+        'Juggernaut XL': fooocus,
+        'Wan 2.1': comfyui
+    }});
+});
+
+app.post('/api/generate-image', async (req, res) => {
+    const startTime = Date.now();
+    const { prompt, aspectRatio } = req.body;
+    if (!prompt) return res.status(400).json({ error: 'Prompt is required.' });
+
+    const resMap = { '1:1': '1024*1024', '4:3': '1152*896', '3:4': '896*1152', '16:9': '1344*768', '9:16': '768*1344' };
+    const aspectRes = resMap[aspectRatio] || '1024*1024';
+
+    try {
+        const response = await fetch(`${FOOOCUS_URL}/v1/generation/text-to-image`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                prompt,
+                negative_prompt: 'cartoon, painting, illustration, worst quality, low quality, blurry',
+                style_selections: ['Fooocus V2', 'Fooocus Enhance', 'Fooocus Sharp'],
+                performance_selection: 'Speed',
+                aspect_ratios_selection: aspectRes,
+                image_number: 1, image_seed: -1, sharpness: 2, guidance_scale: 7,
+                base_model_name: 'juggernautXL_v8Rundiffusion.safetensors',
+                refiner_model_name: 'None',
+                loras: [{ enabled: true, model_name: 'sd_xl_offset_example-lora_1.0.safetensors', weight: 0.1 }]
+            })
+        });
+        if (!response.ok) throw new Error('Fooocus-API not available');
+        const data = await response.json();
+
+        if (data?.[0]?.url) {
+            const imgRes = await fetch(data[0].url);
+            if (imgRes.ok) {
+                const buf = Buffer.from(await imgRes.arrayBuffer());
+                return res.json({ url: `data:image/png;base64,${buf.toString('base64')}`, duration: Date.now() - startTime });
+            }
+        }
+        if (data?.[0]?.base64) {
+            return res.json({ url: `data:image/png;base64,${data[0].base64}`, duration: Date.now() - startTime });
+        }
+        throw new Error('No image returned');
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/generate-video', async (req, res) => {
+    const startTime = Date.now();
+    const { prompt, aspectRatio, image } = req.body;
+    if (!prompt && !image) return res.status(400).json({ error: 'Prompt or image required.' });
+
+    const WebSocket = require('ws');
+    const resMap = { '16:9': [832, 480], '9:16': [480, 832], '1:1': [640, 640], '4:3': [704, 528], '3:4': [528, 704] };
+    const [width, height] = resMap[aspectRatio] || [832, 480];
+
+    try {
+        const workflow = {
+            '1': { class_type: 'UNETLoader', inputs: { unet_name: 'wan2.1_t2v_1.3B_bf16.safetensors', weight_dtype: 'default' } },
+            '2': { class_type: 'CLIPLoader', inputs: { clip_name: 'umt5_xxl_fp8_e4m3fn_scaled.safetensors', type: 'wan', device: 'default' } },
+            '3': { class_type: 'VAELoader', inputs: { vae_name: 'wan_2.1_vae.safetensors' } },
+            '4': { class_type: 'CLIPTextEncode', inputs: { text: prompt || 'camera slowly panning', clip: ['2', 0] } },
+            '5': { class_type: 'CLIPTextEncode', inputs: { text: 'blurry, low quality, distorted, watermark', clip: ['2', 0] } },
+            '6': { class_type: 'EmptyHunyuanLatentVideo', inputs: { width, height, length: 33, batch_size: 1 } },
+            '7': { class_type: 'ModelSamplingSD3', inputs: { model: ['1', 0], shift: 8.0 } },
+            '8': { class_type: 'KSampler', inputs: {
+                model: ['7', 0], positive: ['4', 0], negative: ['5', 0], latent_image: ['6', 0],
+                seed: Math.floor(Math.random() * 1e15), control_after_generate: 'randomize',
+                steps: 30, cfg: 6.0, sampler_name: 'uni_pc', scheduler: 'simple', denoise: 1.0
+            }},
+            '9': { class_type: 'VAEDecode', inputs: { samples: ['8', 0], vae: ['3', 0] } },
+            '10': { class_type: 'CreateVideo', inputs: { images: ['9', 0], fps: 16 } },
+            '11': { class_type: 'SaveVideo', inputs: { video: ['10', 0], filename_prefix: 'video/RetracVideo', format: 'auto', codec: 'auto' } }
+        };
+
+        const clientId = 'retraclocal_' + Date.now();
+        const promptRes = await fetch(`${COMFYUI_URL}/api/prompt`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prompt: workflow, client_id: clientId })
+        });
+        if (!promptRes.ok) throw new Error('ComfyUI not available');
+        const { prompt_id } = await promptRes.json();
+
+        const result = await new Promise((resolve, reject) => {
+            const ws = new WebSocket(`${COMFYUI_URL.replace('http', 'ws')}/ws?clientId=${clientId}`);
+            const timeout = setTimeout(() => { ws.close(); reject(new Error('Video generation timed out (5 min).')); }, 300000);
+            ws.on('message', (raw) => {
+                try {
+                    const msg = JSON.parse(raw.toString());
+                    if (msg.type === 'executed' && msg.data?.output?.images?.[0]) {
+                        clearTimeout(timeout); ws.close(); resolve(msg.data.output.images[0]);
+                    } else if (msg.type === 'execution_error') {
+                        clearTimeout(timeout); ws.close(); reject(new Error(msg.data?.exception_message || 'ComfyUI error'));
+                    }
+                } catch {}
+            });
+            ws.on('error', (err) => { clearTimeout(timeout); reject(new Error('ComfyUI connection error')); });
+        });
+
+        const videoUrl = `${COMFYUI_URL}/api/view?filename=${encodeURIComponent(result.filename)}&subfolder=${encodeURIComponent(result.subfolder || '')}&type=${result.type || 'output'}`;
+        const videoRes = await fetch(videoUrl);
+        if (!videoRes.ok) throw new Error('Failed to fetch video');
+        const videoBuf = Buffer.from(await videoRes.arrayBuffer());
+        const mime = result.filename?.endsWith('.webm') ? 'video/webm' : 'video/mp4';
+        res.json({ url: `data:${mime};base64,${videoBuf.toString('base64')}`, duration: Date.now() - startTime });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // Dashboard
 app.get('/', (req, res) => {
     res.sendFile(__dirname + '/public/dashboard.html');
@@ -554,9 +683,14 @@ app.listen(PORT, () => {
     console.log(`\n  RetracLocal API running on http://localhost:${PORT}`);
     console.log(`  Ollama backend: ${OLLAMA_URL}`);
     console.log(`  API key: ${API_KEY ? 'enabled' : 'disabled (open access)'}\n`);
+    console.log(`  Fooocus-API: ${FOOOCUS_URL}`);
+    console.log(`  ComfyUI: ${COMFYUI_URL}\n`);
     console.log('  Endpoints:');
     console.log('    GET  /api/status       — health check + available models');
     console.log('    GET  /api/models       — list all supported models');
+    console.log('    GET  /api/media-status — image/video backends status');
+    console.log('    POST /api/generate-image — generate image (Juggernaut XL)');
+    console.log('    POST /api/generate-video — generate video (Wan 2.1)');
     console.log('    POST /api/chat         — streaming chat (SSE)');
     console.log('    POST /api/chat/sync    — non-streaming chat');
     console.log('    POST /api/models/pull  — download a model\n');
