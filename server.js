@@ -293,7 +293,7 @@ function resolveProvider(model) {
 // ============ AI Chat Endpoint (streaming) ============
 
 app.post('/api/chat', async (req, res) => {
-    const { model, messages, searchWeb, deepResearch, handwriting } = req.body;
+    const { model, messages, searchWeb, deepResearch, handwriting, systemPrompt: customSystemPrompt } = req.body;
 
     if (!messages || !messages.length) {
         return res.status(400).json({ error: 'No messages provided.' });
@@ -346,11 +346,11 @@ app.post('/api/chat', async (req, res) => {
             } else if (currentProvider === 'ensemble') {
                 await streamEnsemble(res, messages, searchWeb, deepResearch, handwriting);
             } else if (currentProvider === 'anthropic') {
-                await streamClaude(res, messages, API_KEYS.anthropic, currentModel, searchWeb, deepResearch, 0, handwriting);
+                await streamClaude(res, messages, API_KEYS.anthropic, currentModel, searchWeb, deepResearch, 0, handwriting, customSystemPrompt);
             } else if (currentProvider === 'google') {
-                await streamGemini(res, messages, API_KEYS.google, currentModel, searchWeb, deepResearch, handwriting);
+                await streamGemini(res, messages, API_KEYS.google, currentModel, searchWeb, deepResearch, handwriting, customSystemPrompt);
             } else if (currentProvider === 'openai') {
-                await streamOpenAI(res, messages, API_KEYS.openai, currentModel, searchWeb, deepResearch, handwriting);
+                await streamOpenAI(res, messages, API_KEYS.openai, currentModel, searchWeb, deepResearch, handwriting, customSystemPrompt);
             }
             return; // Success - exit the loop
         } catch (err) {
@@ -461,7 +461,7 @@ function hasAnyImages(messages) {
 
 // ============ Claude (Anthropic) Streaming ============
 
-async function streamClaude(res, messages, apiKey, modelName, searchWeb, deepResearch, retryCount = 0, handwriting = false) {
+async function streamClaude(res, messages, apiKey, modelName, searchWeb, deepResearch, retryCount = 0, handwriting = false, customSystemPrompt = null) {
     const startTime = Date.now();
     const Anthropic = require('@anthropic-ai/sdk');
     const client = new Anthropic({ apiKey });
@@ -635,7 +635,7 @@ Use REAL domains. Return ONLY the raw JSON array.`,
         }
 
         // ====== FINAL PHASE: Generate response ======
-        let systemPrompt = buildSystemPrompt(searchWeb, deepResearch, needsSearch, sources);
+        let systemPrompt = customSystemPrompt || buildSystemPrompt(searchWeb, deepResearch, needsSearch, sources);
         if (handwriting && hasAnyImages(messages)) {
             systemPrompt = HANDWRITING_PROMPT + '\n\n' + systemPrompt;
         }
@@ -690,7 +690,7 @@ Use REAL domains. Return ONLY the raw JSON array.`,
                 console.log(`API overloaded, retrying in ${waitMs}ms (attempt ${retryCount + 2}/4)...`);
                 res.write(`data: ${JSON.stringify({ type: 'thinking', content: 'Server busy, retrying...' })}\n\n`);
                 await sleep(waitMs);
-                return streamClaude(res, messages, apiKey, modelName, searchWeb, deepResearch, retryCount + 1, handwriting);
+                return streamClaude(res, messages, apiKey, modelName, searchWeb, deepResearch, retryCount + 1, handwriting, customSystemPrompt);
             }
         }
         throw err;
@@ -699,7 +699,7 @@ Use REAL domains. Return ONLY the raw JSON array.`,
 
 // ============ Gemini (Google) Streaming ============
 
-async function streamGemini(res, messages, apiKey, modelName, searchWeb, deepResearch, handwriting = false) {
+async function streamGemini(res, messages, apiKey, modelName, searchWeb, deepResearch, handwriting = false, customSystemPrompt = null) {
     const startTime = Date.now();
     const { GoogleGenerativeAI } = require('@google/generative-ai');
     const genAI = new GoogleGenerativeAI(apiKey);
@@ -714,8 +714,8 @@ async function streamGemini(res, messages, apiKey, modelName, searchWeb, deepRes
 
     const useGrounding = searchWeb || deepResearch;
 
-    let sysPrompt = buildSystemPrompt(searchWeb, deepResearch, useGrounding, []);
-    if (handwriting && hasAnyImages(messages)) {
+    let sysPrompt = customSystemPrompt || buildSystemPrompt(searchWeb, deepResearch, useGrounding, []);
+    if (!customSystemPrompt && handwriting && hasAnyImages(messages)) {
         sysPrompt = HANDWRITING_PROMPT + '\n\n' + sysPrompt;
     }
 
@@ -829,7 +829,7 @@ async function streamGemini(res, messages, apiKey, modelName, searchWeb, deepRes
 
 // ============ OpenAI (GPT) Streaming ============
 
-async function streamOpenAI(res, messages, apiKey, modelName, searchWeb, deepResearch, handwriting = false) {
+async function streamOpenAI(res, messages, apiKey, modelName, searchWeb, deepResearch, handwriting = false, customSystemPrompt = null) {
     const startTime = Date.now();
     const OpenAI = require('openai');
     const client = new OpenAI({ apiKey });
@@ -842,8 +842,8 @@ async function streamOpenAI(res, messages, apiKey, modelName, searchWeb, deepRes
     };
     const modelId = modelMap[modelName] || 'gpt-4o';
 
-    let systemPrompt = buildSystemPrompt(searchWeb, deepResearch, false, []);
-    if (handwriting && hasAnyImages(messages)) {
+    let systemPrompt = customSystemPrompt || buildSystemPrompt(searchWeb, deepResearch, false, []);
+    if (!customSystemPrompt && handwriting && hasAnyImages(messages)) {
         systemPrompt = HANDWRITING_PROMPT + '\n\n' + systemPrompt;
     }
     const openaiMessages = [
@@ -1185,7 +1185,8 @@ If any answer is no, the response isn't good enough.`;
         prompt += `\n\nIMPORTANT: Do NOT include any "Sources", "References", or "Quellen" section. Do NOT cite URLs or websites. Just answer from the depth of your knowledge.`;
     } else if (searchWeb && !deepResearch) {
         prompt += `\n\nThe user has enabled "Search the web" mode. You have real-time information. Don't just report what you found — ANALYZE it. Integrate facts, breaking developments, and current data into your narrative like a world-class journalist who happens to also be a domain expert. The reader should feel like they're getting analysis from the smartest person in the room, not a news aggregator.
-IMPORTANT: Do NOT list sources or references in your text — the UI displays them separately.`;
+IMPORTANT: Do NOT list sources or references in your text — the UI displays them separately.
+CRITICAL: Respond in the SAME language the user used. German question = German answer.`;
     }
 
     if (deepResearch) {
@@ -1229,7 +1230,9 @@ You are producing a piece that should rival the best of Bloomberg, The Atlantic,
 - Narrative quality that would not embarrass a Pulitzer nominee
 - A clear, courageous conclusion — not "more research is needed"
 
-IMPORTANT: Do NOT include a sources/references section — the UI handles this separately.`;
+IMPORTANT: Do NOT include a sources/references section — the UI handles this separately.
+
+CRITICAL LANGUAGE RULE: Write your ENTIRE response in the SAME language the user used in their question. If the user asked in German, write the ENTIRE deep research report in German. If in English, write in English. The section titles, analysis, everything — must be in the user's language. NO EXCEPTIONS.`;
     }
 
     if (needsSearch && sources && sources.length > 0) {
@@ -1419,6 +1422,77 @@ app.post('/api/generate-image', async (req, res) => {
     }
 });
 
+// ============ Local Image Generation (Fooocus / Juggernaut XL) ============
+
+app.post('/api/generate-image-local', async (req, res) => {
+    const startTime = Date.now();
+    const { prompt, aspectRatio } = req.body;
+    if (!prompt) return res.status(400).json({ error: 'Prompt is required.' });
+
+    // Map aspect ratio to Fooocus resolution
+    const resolutionMap = {
+        '1:1': '1024×1024',
+        '4:3': '1152×896',
+        '3:4': '896×1152',
+        '16:9': '1344×768',
+        '9:16': '768×1344'
+    };
+    const resolution = resolutionMap[aspectRatio] || '1024×1024';
+
+    try {
+        const FOOOCUS_URL = process.env.FOOOCUS_URL || 'http://127.0.0.1:8888';
+
+        const resMap = {
+            '1:1': '1024*1024', '4:3': '1152*896', '3:4': '896*1152',
+            '16:9': '1344*768', '9:16': '768*1344'
+        };
+        const aspectRes = resMap[aspectRatio] || '1024*1024';
+
+        const response = await fetch(`${FOOOCUS_URL}/v1/generation/text-to-image`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                prompt: prompt,
+                negative_prompt: 'cartoon, painting, illustration, worst quality, low quality, blurry',
+                style_selections: ['Fooocus V2', 'Fooocus Enhance', 'Fooocus Sharp'],
+                performance_selection: 'Speed',
+                aspect_ratios_selection: aspectRes,
+                image_number: 1,
+                image_seed: -1,
+                sharpness: 2,
+                guidance_scale: 7,
+                base_model_name: 'juggernautXL_v8Rundiffusion.safetensors',
+                refiner_model_name: 'None',
+                loras: [{ enabled: true, model_name: 'sd_xl_offset_example-lora_1.0.safetensors', weight: 0.1 }]
+            })
+        });
+
+        if (!response.ok) throw new Error('Fooocus-API is not running. Start it with: python main.py');
+        const data = await response.json();
+
+        if (data && data[0] && data[0].base64) {
+            const dataUrl = `data:image/png;base64,${data[0].base64}`;
+            logUsage({ provider: 'local', model: 'juggernaut-xl', modelDisplay: 'Juggernaut XL', type: 'image', inputTokens: 0, outputTokens: 0, cost: 0, duration: Date.now() - startTime });
+            return res.json({ url: dataUrl, revised_prompt: prompt });
+        } else if (data && data[0] && data[0].url) {
+            // Fetch image from Fooocus-API and convert to base64
+            const imgRes = await fetch(data[0].url);
+            if (imgRes.ok) {
+                const imgBuffer = Buffer.from(await imgRes.arrayBuffer());
+                const imgBase64 = imgBuffer.toString('base64');
+                const dataUrl = `data:image/png;base64,${imgBase64}`;
+                logUsage({ provider: 'local', model: 'juggernaut-xl', modelDisplay: 'Juggernaut XL', type: 'image', inputTokens: 0, outputTokens: 0, cost: 0, duration: Date.now() - startTime });
+                return res.json({ url: dataUrl, revised_prompt: prompt });
+            }
+        }
+
+        throw new Error('No image returned from Fooocus.');
+    } catch (err) {
+        console.error('Local image generation error:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // ============ Video Generation Endpoint ============
 
 app.post('/api/generate-video', async (req, res) => {
@@ -1544,8 +1618,8 @@ app.post('/api/generate-video', async (req, res) => {
 // Serve uploads
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// Fallback
-app.get('*', (req, res) => {
+// Fallback (skip /api/ routes — let them pass through to later handlers)
+app.get(/^(?!\/api\/).*/, (req, res) => {
     const filePath = path.join(__dirname, req.path);
     if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
         res.sendFile(filePath);
@@ -1554,10 +1628,353 @@ app.get('*', (req, res) => {
     }
 });
 
+// ============ Auto-start Sub-Services ============
+
+const { spawn } = require('child_process');
+const childProcesses = [];
+
+function startSubProcess(label, command, args, cwd, filter) {
+    if (!fs.existsSync(cwd)) return null;
+
+    const child = spawn(command, args, {
+        cwd,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        shell: false
+    });
+
+    child.stdout.on('data', (data) => {
+        for (const line of data.toString().split('\n')) {
+            const t = line.trim();
+            if (t) console.log(`  [${label}] ${t}`);
+        }
+    });
+
+    child.stderr.on('data', (data) => {
+        for (const line of data.toString().split('\n')) {
+            const t = line.trim();
+            if (t && (!filter || !filter.test(t))) {
+                console.log(`  [${label}] ${t}`);
+            }
+        }
+    });
+
+    child.on('error', (err) => {
+        console.log(`  [${label}] Could not start: ${err.message}`);
+    });
+
+    child.on('exit', (code) => {
+        if (code !== null && code !== 0) {
+            console.log(`  [${label}] Exited with code ${code}`);
+        }
+    });
+
+    childProcesses.push(child);
+    return child;
+}
+
+// Cleanup all child processes on exit
+function killAll() {
+    for (const p of childProcesses) {
+        try { p.kill(); } catch {}
+    }
+}
+process.on('exit', killAll);
+process.on('SIGINT', () => { killAll(); process.exit(); });
+process.on('SIGTERM', () => { killAll(); process.exit(); });
+
+// ============ Spotify Integration ============
+const SpotifyWebApi = require('spotify-web-api-node');
+
+const spotifyApi = new SpotifyWebApi({
+    clientId: process.env.SPOTIFY_CLIENT_ID || '',
+    clientSecret: process.env.SPOTIFY_CLIENT_SECRET || '',
+    redirectUri: 'http://127.0.0.1:3000/api/spotify/callback'
+});
+
+// Persist Spotify tokens to file
+const SPOTIFY_TOKEN_FILE = path.join(__dirname, '.spotify-tokens.json');
+
+function saveSpotifyTokens() {
+    const tokens = {
+        accessToken: spotifyApi.getAccessToken(),
+        refreshToken: spotifyApi.getRefreshToken()
+    };
+    if (tokens.accessToken) {
+        fs.writeFileSync(SPOTIFY_TOKEN_FILE, JSON.stringify(tokens));
+    }
+}
+
+function loadSpotifyTokens() {
+    try {
+        if (fs.existsSync(SPOTIFY_TOKEN_FILE)) {
+            const tokens = JSON.parse(fs.readFileSync(SPOTIFY_TOKEN_FILE, 'utf8'));
+            if (tokens.accessToken) spotifyApi.setAccessToken(tokens.accessToken);
+            if (tokens.refreshToken) {
+                spotifyApi.setRefreshToken(tokens.refreshToken);
+                // Refresh immediately since access token may be expired
+                spotifyApi.refreshAccessToken().then(data => {
+                    spotifyApi.setAccessToken(data.body.access_token);
+                    saveSpotifyTokens();
+                    console.log('  Spotify reconnected from saved tokens ✓');
+                    // Auto-refresh before expiry
+                    setInterval(async () => {
+                        try {
+                            const refreshed = await spotifyApi.refreshAccessToken();
+                            spotifyApi.setAccessToken(refreshed.body.access_token);
+                            saveSpotifyTokens();
+                        } catch(e) {}
+                    }, 3000 * 1000);
+                }).catch((err) => {
+                    console.log('  Spotify token refresh failed:', err.message || err);
+                    console.log('  Please re-login at /api/spotify/login');
+                });
+            }
+        }
+    } catch(e) {
+        console.log('  Spotify token load error:', e.message);
+    }
+}
+
+// Load saved tokens on startup
+loadSpotifyTokens();
+
+// Auth: redirect to Spotify login
+app.get('/api/spotify/login', (req, res) => {
+    const scopes = [
+        'user-read-playback-state',
+        'user-modify-playback-state',
+        'user-read-currently-playing',
+        'streaming',
+        'playlist-read-private',
+        'playlist-read-collaborative',
+        'user-library-read',
+        'user-top-read'
+    ];
+    const authorizeURL = spotifyApi.createAuthorizeURL(scopes, 'retrac-state', true);
+    res.redirect(authorizeURL);
+});
+
+// Auth callback (on main server, redirected from port 8888)
+app.get('/api/spotify/callback', async (req, res) => {
+    const { code } = req.query;
+    if (!code) return res.status(400).send('No code provided');
+    try {
+        const data = await spotifyApi.authorizationCodeGrant(code);
+        spotifyApi.setAccessToken(data.body.access_token);
+        spotifyApi.setRefreshToken(data.body.refresh_token);
+
+        // Auto-refresh before expiry
+        setInterval(async () => {
+            try {
+                const refreshed = await spotifyApi.refreshAccessToken();
+                spotifyApi.setAccessToken(refreshed.body.access_token);
+            } catch(e) { console.error('Spotify refresh failed:', e.message); }
+        }, (data.body.expires_in - 60) * 1000);
+
+        saveSpotifyTokens();
+        res.send('<html><body style="background:#111;color:white;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;"><h2>Spotify connected! You can close this tab.</h2></body></html>');
+        console.log('  Spotify connected ✓');
+    } catch (err) {
+        console.error('Spotify auth error:', err.message);
+        res.status(500).send('Spotify auth failed: ' + err.message);
+    }
+});
+
+// Get access token for Web Playback SDK
+app.get('/api/spotify/token', (req, res) => {
+    const token = spotifyApi.getAccessToken();
+    res.json({ accessToken: token || null });
+});
+
+// Transfer playback to a device
+app.post('/api/spotify/transfer', async (req, res) => {
+    try {
+        const { deviceId } = req.body;
+        await spotifyApi.transferMyPlayback([deviceId], { play: false });
+        res.json({ action: 'transferred' });
+    } catch(err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Status: check if connected
+app.get('/api/spotify/status', (req, res) => {
+    res.json({ connected: !!spotifyApi.getAccessToken() });
+});
+
+// Play: search and play a track/playlist/artist
+app.post('/api/spotify/play', async (req, res) => {
+    try {
+        if (!spotifyApi.getAccessToken()) return res.status(401).json({ error: 'Spotify not connected. Visit /api/spotify/login' });
+        const { query, type, searchOnly } = req.body;
+
+        if (!query) {
+            await spotifyApi.play();
+            return res.json({ action: 'resumed' });
+        }
+
+        let uri, name, artist;
+        if (type === 'playlist' || query.toLowerCase().includes('playlist')) {
+            const result = await spotifyApi.searchPlaylists(query, { limit: 1 });
+            if (result.body.playlists.items.length === 0) return res.json({ error: 'No playlist found' });
+            uri = result.body.playlists.items[0].uri;
+            name = result.body.playlists.items[0].name;
+            if (!searchOnly) await spotifyApi.play({ context_uri: uri });
+            return res.json({ action: 'playing_playlist', name });
+        } else if (type === 'artist') {
+            const result = await spotifyApi.searchArtists(query, { limit: 1 });
+            if (result.body.artists.items.length === 0) return res.json({ error: 'No artist found' });
+            uri = result.body.artists.items[0].uri;
+            name = result.body.artists.items[0].name;
+            if (!searchOnly) await spotifyApi.play({ context_uri: uri });
+            return res.json({ action: 'playing_artist', name });
+        } else {
+            const result = await spotifyApi.searchTracks(query, { limit: 1 });
+            if (result.body.tracks.items.length === 0) return res.json({ error: 'No track found' });
+            const track = result.body.tracks.items[0];
+            name = track.name;
+            artist = track.artists[0].name;
+            if (!searchOnly) await spotifyApi.play({ uris: [track.uri] });
+            return res.json({ action: 'playing_track', name, artist });
+        }
+    } catch (err) {
+        console.error('Spotify play error:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Pause
+app.post('/api/spotify/pause', async (req, res) => {
+    try {
+        await spotifyApi.pause();
+        res.json({ action: 'paused' });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Skip
+app.post('/api/spotify/skip', async (req, res) => {
+    try {
+        await spotifyApi.skipToNext();
+        res.json({ action: 'skipped' });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Previous
+app.post('/api/spotify/previous', async (req, res) => {
+    try {
+        await spotifyApi.skipToPrevious();
+        res.json({ action: 'previous' });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Volume
+app.post('/api/spotify/volume', async (req, res) => {
+    try {
+        const { volume } = req.body; // 0-100
+        await spotifyApi.setVolume(Math.max(0, Math.min(100, volume)));
+        res.json({ action: 'volume_set', volume });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Currently playing
+app.get('/api/spotify/current', async (req, res) => {
+    try {
+        const data = await spotifyApi.getMyCurrentPlayingTrack();
+        if (!data.body || !data.body.item) return res.json({ playing: false });
+        const track = data.body.item;
+        res.json({
+            playing: data.body.is_playing,
+            name: track.name,
+            artist: track.artists.map(a => a.name).join(', '),
+            album: track.album.name,
+            progress: data.body.progress_ms,
+            duration: track.duration_ms
+        });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ============ Edge TTS (Text-to-Speech) ============
+const { EdgeTTS } = require('node-edge-tts');
+
+// TTS cache for repeated phrases
+const ttsCache = new Map();
+
+app.post('/api/tts', async (req, res) => {
+    try {
+        const { text, voice } = req.body;
+        if (!text || text.trim() === '.') return res.status(400).json({ error: 'No text' });
+
+        // Check cache
+        const cacheKey = (voice || 'default') + ':' + text;
+        if (ttsCache.has(cacheKey)) {
+            const cached = ttsCache.get(cacheKey);
+            res.set({ 'Content-Type': 'audio/mpeg', 'Content-Length': cached.length });
+            return res.send(cached);
+        }
+
+        const tmpFile = path.join(__dirname, 'uploads', `tts-${Date.now()}.mp3`);
+        const tts = new EdgeTTS({
+            voice: voice || 'de-DE-FlorianMultilingualNeural',
+            rate: '-10%',
+            pitch: '-5Hz'
+        });
+        await tts.ttsPromise(text, tmpFile);
+
+        const audioBuffer = fs.readFileSync(tmpFile);
+        fs.unlinkSync(tmpFile);
+
+        // Cache (max 50 entries)
+        if (ttsCache.size >= 50) ttsCache.delete(ttsCache.keys().next().value);
+        ttsCache.set(cacheKey, audioBuffer);
+
+        res.set({ 'Content-Type': 'audio/mpeg', 'Content-Length': audioBuffer.length });
+        res.send(audioBuffer);
+    } catch (err) {
+        console.error('TTS error:', err.message);
+        res.status(500).json({ error: 'TTS failed: ' + err.message });
+    }
+});
+
+console.log('  Edge TTS loaded ✓');
+
+// Spotify callback listener on port 8888 (required by Spotify for localhost)
+const spotifyCallbackApp = express();
+spotifyCallbackApp.get('/callback', async (req, res) => {
+    const { code } = req.query;
+    if (!code) return res.status(400).send('No code');
+    try {
+        const data = await spotifyApi.authorizationCodeGrant(code);
+        spotifyApi.setAccessToken(data.body.access_token);
+        spotifyApi.setRefreshToken(data.body.refresh_token);
+        setInterval(async () => {
+            try {
+                const refreshed = await spotifyApi.refreshAccessToken();
+                spotifyApi.setAccessToken(refreshed.body.access_token);
+            } catch(e) {}
+        }, (data.body.expires_in - 60) * 1000);
+        saveSpotifyTokens();
+        res.send('<html><body style="background:#111;color:white;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;"><h2>Spotify connected! You can close this tab.</h2></body></html>');
+        console.log('  Spotify connected ✓');
+    } catch (err) {
+        res.status(500).send('Spotify auth failed: ' + err.message);
+    }
+});
+spotifyCallbackApp.listen(8888, () => console.log('  Spotify callback on port 8888'));
+
 app.listen(PORT, () => {
     const hasAnthropic = !!API_KEYS.anthropic;
     const hasOpenAI = !!API_KEYS.openai;
     const hasGoogle = !!API_KEYS.google;
-    console.log(`\n  🚀 Retrac AI is running at http://localhost:${PORT}`);
-    console.log(`  📡 API Keys: Anthropic ${hasAnthropic ? '✓' : '✗'} | OpenAI ${hasOpenAI ? '✓' : '✗'} | Google ${hasGoogle ? '✓' : '✗'}\n`);
+    console.log(`\n  Retrac AI is running at http://localhost:${PORT}`);
+    console.log(`  API Keys: Anthropic ${hasAnthropic ? '✓' : '✗'} | OpenAI ${hasOpenAI ? '✓' : '✗'} | Google ${hasGoogle ? '✓' : '✗'}`);
+
+    // Auto-start RetracLocal (Ollama gateway on port 3456)
+    const retracLocalDir = path.join(__dirname, 'RetracLocal');
+    if (fs.existsSync(path.join(retracLocalDir, 'server.js'))) {
+        startSubProcess('RetracLocal', 'node', ['server.js'], retracLocalDir);
+        console.log(`  RetracLocal: Starting on port 3456...`);
+    }
+
+
+    console.log('');
 });

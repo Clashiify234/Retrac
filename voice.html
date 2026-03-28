@@ -1,0 +1,1889 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="favicon.png" sizes="any">
+    <title>Jarvis - Retrac</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script>window.onSpotifyWebPlaybackSDKReady = () => {};</script>
+    <script src="https://sdk.scdn.co/spotify-player.js"></script>
+    <script src="js/retrac-api.js"></script>
+    <script src="js/auth-modal.js"></script>
+    <script src="js/search-chat.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #000000;
+            display: flex;
+            height: 100vh;
+            margin: 0;
+            color: white;
+            overflow: hidden;
+        }
+
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #555; }
+
+        /* Sidebar collapse */
+        .sidebar-collapsed { width: 60px !important; padding: 12px 6px !important; }
+        .sidebar-collapsed .sidebar-hide { display: none !important; }
+        .sidebar-collapsed .sidebar-header { justify-content: center !important; margin-bottom: 16px !important; }
+        .sidebar-collapsed .sidebar-header > *:not(.sidebar-logo) { display: none !important; }
+        .sidebar-collapsed nav { gap: 4px !important; align-items: center; }
+        .sidebar-collapsed nav a { justify-content: center; padding: 10px; border-radius: 12px; width: 44px; height: 44px; margin: 0 auto; }
+        .sidebar-collapsed nav a span { display: none !important; }
+        .sidebar-collapsed nav a svg { margin: 0; width: 22px; height: 22px; }
+        .sidebar-collapsed #sidebar-auth { align-items: center; }
+        .sidebar-collapsed #sidebar-auth button { display: none; }
+        .sidebar-collapsed #sidebar-auth > div { justify-content: center; }
+        .sidebar-collapsed #sidebar-auth > div > div.flex-1 { display: none; }
+        .sidebar-collapsed #sidebar-auth .go-pro-card { display: none; }
+        aside { transition: width 0.2s ease; }
+
+        /* Responsive */
+        input, textarea, select { font-size: 16px !important; }
+        @supports (height: 100dvh) { body { height: 100dvh; } }
+        * { -webkit-overflow-scrolling: touch; -webkit-tap-highlight-color: transparent; }
+
+        @media (max-width: 1024px) {
+            #sidebar { width: 88px !important; padding: 12px 8px !important; }
+            #sidebar .sidebar-hide { display: none !important; }
+            #sidebar .sidebar-header { justify-content: center; }
+            #sidebar #sidebar-auth { align-items: center; }
+            #sidebar #sidebar-auth button { display: none; }
+            #sidebar #sidebar-auth > div { justify-content: center; }
+            #sidebar #sidebar-auth > div > div.flex-1 { display: none; }
+            #sidebar #sidebar-auth .go-pro-card { display: none; }
+            #sidebar nav { gap: 4px !important; }
+            #sidebar nav a { flex-direction: column; justify-content: center; align-items: center; padding: 10px 4px; border-radius: 12px; gap: 4px !important; }
+            #sidebar nav a span { display: block !important; font-size: 10px !important; opacity: 0.7; text-align: center; line-height: 1.2; }
+            #sidebar nav a svg { margin: 0; width: 24px; height: 24px; }
+            .mobile-menu-btn { display: none !important; }
+        }
+
+        @media (max-width: 768px) {
+            #sidebar {
+                position: fixed !important;
+                left: -300px;
+                top: 0;
+                height: 100vh;
+                z-index: 1000;
+                width: 280px !important;
+                transition: left 0.3s ease;
+            }
+            #sidebar.mobile-open { left: 0; }
+            #sidebar .sidebar-hide { display: flex !important; }
+            #sidebar .sidebar-header { justify-content: space-between; }
+            #sidebar nav a { justify-content: flex-start; padding: 8px 12px; }
+            #sidebar nav a span { display: inline; }
+            .mobile-backdrop { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 999; }
+            .mobile-backdrop.active { display: block; }
+            .mobile-menu-btn { display: flex !important; }
+        }
+
+        /* No ring styles needed — blob itself pulsates */
+
+        .transcript-container { max-height: 200px; overflow-y: auto; scrollbar-width: thin; }
+
+        /* Model dropdown */
+        #voice-model-dropdown {
+            transform-origin: bottom center;
+            transition: opacity 0.2s ease, transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        #voice-model-dropdown.dropdown-hidden { opacity: 0; transform: scale(0.95) translateY(8px); pointer-events: none; }
+        #voice-model-dropdown.dropdown-visible { opacity: 1; transform: scale(1) translateY(0); pointer-events: auto; }
+
+        .fade-in { animation: fadeIn 0.5s ease; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body class="antialiased">
+
+<button class="mobile-menu-btn" style="display:none;position:fixed;top:12px;left:12px;z-index:998;background:#232323;border:1px solid #333;border-radius:8px;padding:8px;color:white;cursor:pointer;">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+</button>
+<div class="mobile-backdrop" id="mobile-backdrop"></div>
+
+    <!-- Sidebar (identical to index.html) -->
+    <aside id="sidebar" class="w-[280px] h-full bg-[#171717] flex flex-col p-4 border-r border-[#2a2a2a] shrink-0">
+
+        <!-- Sidebar Header -->
+        <div class="sidebar-header flex items-center justify-between mb-8 px-1 mt-1">
+            <a href="index.html" class="sidebar-logo text-white hover:opacity-80 transition-opacity">
+                <img src="logo.png" width="32" height="32" alt="Retrac" class="w-8 h-8">
+            </a>
+            <div class="flex items-center gap-3 sidebar-hide">
+                <button id="sidebar-toggle-btn" class="text-[#a0a0a0] bg-[#232323] border border-[#2e2e2e] p-1.5 rounded-lg hover:text-white hover:bg-[#252525] transition-colors">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="3" width="18" height="18" rx="3" ry="3"></rect>
+                        <line x1="15" y1="3" x2="15" y2="21"></line>
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- New Chat Button -->
+        <a href="index.html" class="sidebar-hide flex items-center justify-between w-full bg-[#232323] hover:bg-[#252525] border border-[#333333] rounded-full py-2.5 px-4 mb-6 transition-colors group">
+            <div class="flex items-center gap-3">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="text-white">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                </svg>
+                <span class="font-medium text-[15px] text-[#f0f0f0]">New Chat</span>
+            </div>
+            <span class="text-[13px] text-[#707070] font-mono tracking-wide">Ctrl O</span>
+        </a>
+
+        <!-- Navigation -->
+        <nav class="flex flex-col gap-1.5 px-1">
+            <a href="imagine.html" class="sidebar-nav-link flex items-center gap-3.5 py-2 px-3 rounded-lg hover:bg-[#232323] transition-colors text-[#e0e0e0] hover:text-white">
+                <svg class="shrink-0" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="6" width="15" height="13" rx="2"/><path d="M17 10l5-3v10l-5-3v-4z"/><circle cx="9.5" cy="12.5" r="2.5" stroke-width="1.5"/></svg>
+                <span class="text-[15px] font-medium sidebar-hide">Imagine</span>
+            </a>
+            <a href="voice.html" class="sidebar-nav-link flex items-center gap-3.5 py-2 px-3 rounded-lg bg-[#232323] text-white">
+                <svg class="shrink-0" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="22"></line></svg>
+                <span class="text-[15px] font-medium sidebar-hide">Voice</span>
+            </a>
+            <a href="jarvis.html" class="sidebar-nav-link flex items-center gap-3.5 py-2 px-3 rounded-lg hover:bg-[#232323] transition-colors text-[#e0e0e0] hover:text-white">
+                <svg class="shrink-0" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+                <span class="text-[15px] font-medium sidebar-hide">Jarvis</span>
+            </a>
+            <a href="finalize.html" class="sidebar-nav-link flex items-center gap-3.5 py-2 px-3 rounded-lg hover:bg-[#232323] transition-colors text-[#e0e0e0] hover:text-white">
+                <svg class="shrink-0" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg>
+                <span class="text-[15px] font-medium sidebar-hide">Finalize</span>
+            </a>
+            <a href="#" id="search-chat-btn" class="sidebar-nav-link flex items-center gap-3.5 py-2 px-3 rounded-lg hover:bg-[#232323] transition-colors text-[#e0e0e0] hover:text-white">
+                <svg class="shrink-0" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><path d="M21 21l-4.3-4.3"></path></svg>
+                <span class="text-[15px] font-medium sidebar-hide">Search Chat</span>
+            </a>
+        </nav>
+
+        <!-- Chat History -->
+        <div id="chat-history-container" class="sidebar-hide mt-6 px-1 flex-1 overflow-y-auto">
+            <p class="text-[#555] text-[13px] px-3">No chats yet</p>
+        </div>
+
+        <!-- Auth Buttons Bottom / User Profile -->
+        <div id="sidebar-auth" class="mt-auto flex flex-col gap-3 pt-6 pb-2">
+            <button onclick="RetracAuth.showModal()" class="w-full bg-white text-[#171717] font-medium py-2.5 rounded-full hover:bg-gray-200 transition-colors text-[15px]">Log in</button>
+            <button onclick="RetracAuth.showModal()" class="w-full bg-transparent text-white border border-[#333333] font-medium py-2.5 rounded-full hover:bg-[#232323] transition-colors text-[15px]">Sign up</button>
+        </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 flex flex-col bg-[#252525] relative">
+
+        <!-- Top Navbar -->
+        <header class="h-14 flex items-center justify-between px-4 border-b border-[#2a2a2a] bg-[#252525] shrink-0">
+            <div></div>
+            <div class="flex items-center gap-2">
+                <!-- Auto-speak toggle -->
+                <button id="auto-speak-btn" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[#8e8e8e] hover:text-white transition-colors" title="Auto-speak responses">
+                    <svg id="speaker-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                        <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                        <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+                    </svg>
+                    <span class="text-[13px]">Auto-speak</span>
+                </button>
+                <!-- History toggle -->
+                <button id="history-toggle" class="p-2 text-[#8e8e8e] hover:text-white rounded-lg transition-colors" title="Conversation history">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                    </svg>
+                </button>
+            </div>
+        </header>
+
+        <!-- Voice Content -->
+        <div class="flex-1 flex flex-col items-center justify-center px-6 relative">
+
+            <!-- Status text -->
+            <p id="status-text" class="text-[#666] text-[14px] font-medium tracking-wide uppercase mb-2">Say "Hey Jarvis"</p>
+            <p id="status-sub" class="text-[#444] text-[12px] mb-6"></p>
+
+            <!-- Interactive 3D Blob -->
+            <div id="orb" class="relative cursor-pointer mb-4" style="width:500px; height:500px;">
+                <canvas id="blob-canvas" width="500" height="500" style="width:500px; height:500px;"></canvas>
+                <!-- Clickable overlay -->
+                <div id="orb-overlay" class="absolute inset-0 z-10" style="cursor:pointer;"></div>
+            </div>
+
+            <!-- Live transcript -->
+            <div id="user-transcript" class="text-center min-h-[28px] max-w-lg mb-4">
+                <p id="user-transcript-text" class="text-white text-[18px] font-medium"></p>
+            </div>
+
+            <!-- AI Response -->
+            <div id="ai-response-container" class="transcript-container text-center max-w-lg w-full min-h-[24px]">
+                <p id="ai-response-text" class="text-[#9ca3af] text-[16px] leading-relaxed"></p>
+            </div>
+
+            <!-- Model selector -->
+            <div class="relative mt-8">
+                <button id="voice-model-btn" class="flex items-center gap-2 bg-[#212121] border border-[#3a3a3a] rounded-full px-4 py-2 hover:bg-[#2a2a2a] transition-colors">
+                    <span id="voice-model-icon">
+                        <img src="https://raw.githubusercontent.com/lobehub/lobe-icons/refs/heads/master/packages/static-png/dark/claude-color.png" width="16" height="16" alt="Model" />
+                    </span>
+                    <span id="voice-model-label" class="text-[#d1d5db] text-[14px] font-medium">Claude Haiku 4.5</span>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="8 10 12 6 16 10"></polyline>
+                        <polyline points="16 14 12 18 8 14"></polyline>
+                    </svg>
+                </button>
+
+                <div id="voice-model-dropdown" class="dropdown-hidden absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-[260px] bg-[#2a2a2a] border border-[#3e3e3e] rounded-2xl shadow-2xl overflow-hidden z-50">
+                    <div class="py-2" id="voice-model-list"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- History panel (slides in from right) -->
+        <div id="history-panel" class="absolute top-14 right-0 w-[380px] h-[calc(100%-56px)] bg-[#1e1e1e] border-l border-[#2a2a2a] z-40 transform translate-x-full transition-transform duration-300 flex flex-col">
+            <div class="flex items-center justify-between px-5 py-4 border-b border-[#2a2a2a]">
+                <h3 class="text-[16px] font-semibold">Conversation</h3>
+                <button id="history-close" class="text-[#666] hover:text-white transition-colors">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div id="history-messages" class="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-4"></div>
+            <div class="px-5 py-3 border-t border-[#2a2a2a]">
+                <button id="clear-history-btn" class="w-full py-2 text-[14px] text-[#666] hover:text-[#f87171] transition-colors">Clear conversation</button>
+            </div>
+        </div>
+    </main>
+
+<script>
+    // ============ Sidebar Logic ============
+    const sidebarEl = document.getElementById('sidebar');
+    document.getElementById('sidebar-toggle-btn').addEventListener('click', () => {
+        sidebarEl.classList.toggle('sidebar-collapsed');
+    });
+    sidebarEl.querySelector('.sidebar-logo')?.addEventListener('click', (e) => {
+        if (sidebarEl.classList.contains('sidebar-collapsed')) {
+            e.preventDefault();
+            sidebarEl.classList.remove('sidebar-collapsed');
+        }
+    });
+
+    // Mobile menu
+    const mobileMenuBtn = document.querySelector('.mobile-menu-btn');
+    const mobileBackdrop = document.getElementById('mobile-backdrop');
+    if (mobileMenuBtn) {
+        mobileMenuBtn.addEventListener('click', () => {
+            sidebarEl.classList.toggle('mobile-open');
+            mobileBackdrop.classList.toggle('active');
+        });
+        mobileBackdrop?.addEventListener('click', () => {
+            sidebarEl.classList.remove('mobile-open');
+            mobileBackdrop.classList.remove('active');
+        });
+        document.querySelectorAll('#sidebar nav a').forEach(link => {
+            link.addEventListener('click', () => {
+                if (window.innerWidth <= 768) {
+                    sidebarEl.classList.remove('mobile-open');
+                    mobileBackdrop.classList.remove('active');
+                }
+            });
+        });
+    }
+
+    // ============ Voice Assistant Logic ============
+    const orb = document.getElementById('orb');
+    const statusText = document.getElementById('status-text');
+    const userTranscriptText = document.getElementById('user-transcript-text');
+    const aiResponseText = document.getElementById('ai-response-text');
+    const historyPanel = document.getElementById('history-panel');
+    const historyMessages = document.getElementById('history-messages');
+
+    let isListening = false;
+    let isProcessing = false;
+    let isSpeaking = false;
+    let autoSpeak = true;
+    let speechRecognition = null;
+    let speechSynthesis = window.speechSynthesis;
+    let currentUtterance = null;
+    let conversationMessages = [];
+    let selectedModel = 'Claude Haiku 4.5';
+    let transcriptText = '';
+    let interimTranscript = '';
+    let silenceTimer = null;
+
+    // ============ Models ============
+    const models = [
+        { name: 'Claude Haiku 4.5', icon: 'https://raw.githubusercontent.com/lobehub/lobe-icons/refs/heads/master/packages/static-png/dark/claude-color.png' },
+        { name: 'Claude Sonnet 4.5', icon: 'https://raw.githubusercontent.com/lobehub/lobe-icons/refs/heads/master/packages/static-png/dark/claude-color.png', pro: true },
+        { name: 'Claude Opus 4', icon: 'https://raw.githubusercontent.com/lobehub/lobe-icons/refs/heads/master/packages/static-png/dark/claude-color.png', pro: true },
+        { name: 'Gemini 2.5 Flash', icon: 'https://raw.githubusercontent.com/lobehub/lobe-icons/refs/heads/master/packages/static-png/dark/gemini-color.png' },
+        { name: 'Gemini 2.5 Pro', icon: 'https://raw.githubusercontent.com/lobehub/lobe-icons/refs/heads/master/packages/static-png/dark/gemini-color.png', pro: true },
+        { name: 'Qwen 3 14B', icon: 'https://raw.githubusercontent.com/lobehub/lobe-icons/refs/heads/master/packages/static-png/dark/ollama.png', local: true },
+        { name: 'DeepSeek V3 16B', icon: 'https://raw.githubusercontent.com/lobehub/lobe-icons/refs/heads/master/packages/static-png/dark/ollama.png', local: true },
+        { name: 'Llama 3.2', icon: 'https://raw.githubusercontent.com/lobehub/lobe-icons/refs/heads/master/packages/static-png/dark/ollama.png', local: true },
+        { name: 'Smart Ensemble', icon: 'https://raw.githubusercontent.com/lobehub/lobe-icons/refs/heads/master/packages/static-png/dark/ollama.png', local: true },
+    ];
+
+    // ============ Model Selector ============
+    const modelList = document.getElementById('voice-model-list');
+    const modelBtn = document.getElementById('voice-model-btn');
+    const modelDropdown = document.getElementById('voice-model-dropdown');
+    const modelLabel = document.getElementById('voice-model-label');
+    const modelIcon = document.getElementById('voice-model-icon');
+
+    function renderModels() {
+        modelList.innerHTML = '';
+        const cloud = models.filter(m => !m.local);
+        const local = models.filter(m => m.local);
+
+        if (cloud.length) {
+            const label = document.createElement('p');
+            label.className = 'text-[#555] text-[12px] font-medium px-4 py-1';
+            label.textContent = 'Cloud';
+            modelList.appendChild(label);
+            cloud.forEach(m => modelList.appendChild(createModelOption(m)));
+        }
+        if (local.length) {
+            const label = document.createElement('p');
+            label.className = 'text-[#555] text-[12px] font-medium px-4 py-1 mt-1';
+            label.textContent = 'Local';
+            modelList.appendChild(label);
+            local.forEach(m => modelList.appendChild(createModelOption(m)));
+        }
+    }
+
+    function createModelOption(model) {
+        const btn = document.createElement('button');
+        btn.className = 'w-full flex items-center gap-3 px-4 py-2.5 hover:bg-[#353535] transition-colors';
+        btn.innerHTML = `
+            <img src="${model.icon}" width="18" height="18" class="shrink-0 rounded" />
+            <span class="text-white text-[14px]">${model.name}</span>
+            ${model.pro ? '<span class="text-[#f59e0b] text-[11px] italic ml-auto">PRO</span>' : ''}
+            ${model.local ? '<span class="text-[#a78bfa] text-[11px] italic ml-auto">LOCAL</span>' : ''}
+            ${model.name === selectedModel ? '<svg class="ml-auto" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>' : ''}
+        `;
+        btn.addEventListener('click', () => {
+            selectedModel = model.name;
+            modelLabel.textContent = model.name;
+            modelIcon.innerHTML = `<img src="${model.icon}" width="16" height="16" class="rounded" />`;
+            modelDropdown.classList.remove('dropdown-visible');
+            modelDropdown.classList.add('dropdown-hidden');
+            renderModels();
+        });
+        return btn;
+    }
+
+    renderModels();
+
+    modelBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        modelDropdown.classList.toggle('dropdown-hidden');
+        modelDropdown.classList.toggle('dropdown-visible');
+    });
+
+    document.addEventListener('click', () => {
+        modelDropdown.classList.remove('dropdown-visible');
+        modelDropdown.classList.add('dropdown-hidden');
+    });
+
+    // ============ Auto-speak toggle ============
+    const autoSpeakBtn = document.getElementById('auto-speak-btn');
+    const speakerIcon = document.getElementById('speaker-icon');
+    autoSpeakBtn.style.color = '#3b82f6';
+
+    autoSpeakBtn.addEventListener('click', () => {
+        autoSpeak = !autoSpeak;
+        autoSpeakBtn.style.color = autoSpeak ? '#3b82f6' : '#8e8e8e';
+        if (!autoSpeak) stopSpeaking();
+    });
+
+    // ============ History panel ============
+    document.getElementById('history-toggle').addEventListener('click', () => {
+        historyPanel.classList.toggle('translate-x-full');
+    });
+    document.getElementById('history-close').addEventListener('click', () => {
+        historyPanel.classList.add('translate-x-full');
+    });
+    document.getElementById('clear-history-btn').addEventListener('click', () => {
+        conversationMessages = [];
+        historyMessages.innerHTML = '';
+        userTranscriptText.textContent = '';
+        aiResponseText.textContent = '';
+    });
+
+    // ============ Audio Analysis ============
+    let micStream = null;
+    let audioCtx = null;
+    let analyserNode = null;
+    let blobVolume = 0; // 0-1, drives the blob pulsation
+
+    function startMicAnalyser() {
+        navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+            micStream = stream;
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const source = audioCtx.createMediaStreamSource(stream);
+            analyserNode = audioCtx.createAnalyser();
+            analyserNode.fftSize = 256;
+            analyserNode.smoothingTimeConstant = 0.8;
+            source.connect(analyserNode);
+        }).catch(() => {});
+    }
+
+    function stopMicAnalyser() {
+        if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+        if (audioCtx) { audioCtx.close(); audioCtx = null; analyserNode = null; }
+        blobVolume = 0;
+    }
+
+    function updateVolume() {
+        if (analyserNode) {
+            const data = new Uint8Array(analyserNode.frequencyBinCount);
+            analyserNode.getByteFrequencyData(data);
+            let sum = 0;
+            for (let i = 0; i < data.length; i++) sum += data[i];
+            blobVolume = (sum / data.length) / 255; // 0-1
+        } else {
+            blobVolume *= 0.9; // fade out
+        }
+    }
+
+    // ============ Speech Recognition (Wake Word + Active) ============
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const WAKE_WORDS = ['hey jarvis', 'jarvis', 'hey travis', 'hey charvis'];
+    let jarvisMode = 'wake'; // 'wake' = waiting for wake word, 'active' = listening for command
+    let noInputTimer = null;
+
+    // Start the one and only recognition instance
+    function initRecognition() {
+        if (!SpeechRecognition) return;
+        if (speechRecognition) return; // already running
+
+        speechRecognition = new SpeechRecognition();
+        speechRecognition.continuous = true;
+        speechRecognition.interimResults = true;
+        speechRecognition.lang = navigator.language || 'de-DE';
+
+        speechRecognition.onresult = (event) => {
+            if (jarvisMode === 'wake') {
+                // Only check newest results for wake word
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    const text = event.results[i][0].transcript.toLowerCase().trim();
+                    if (WAKE_WORDS.some(w => text.includes(w))) {
+                        // Stop alarm if active
+                        if (alarmActive) stopAlarm();
+
+                        // Wake word found — switch to active mode
+                        jarvisMode = 'active';
+                        isListening = true;
+                        transcriptText = '';
+                        interimTranscript = '';
+                        userTranscriptText.textContent = '';
+                        startMicAnalyser();
+
+                        setStatus('Listening...', 'listening');
+                        document.getElementById('status-sub').textContent = '';
+
+                        // Stop current recognition and restart fresh for clean results
+                        speechRecognition.onend = () => {
+                            speechRecognition.onend = normalOnEnd;
+                            try { speechRecognition.start(); } catch(e) {}
+                        };
+                        speechRecognition.stop();
+
+                        // Timeout if nothing said
+                        noInputTimer = setTimeout(() => {
+                            if (jarvisMode === 'active' && !transcriptText && !interimTranscript) {
+                                returnToWakeWord();
+                            }
+                        }, 4000);
+                        return;
+                    }
+                }
+            } else if (jarvisMode === 'active') {
+                // Collect transcript
+                let allFinal = '';
+                let currentInterim = '';
+                for (let i = 0; i < event.results.length; i++) {
+                    if (event.results[i].isFinal) {
+                        allFinal += event.results[i][0].transcript + ' ';
+                    } else {
+                        currentInterim += event.results[i][0].transcript;
+                    }
+                }
+                transcriptText = allFinal.trim();
+                interimTranscript = currentInterim;
+                userTranscriptText.textContent = (transcriptText + ' ' + interimTranscript).trim();
+
+                clearTimeout(silenceTimer);
+                clearTimeout(noInputTimer);
+                if (transcriptText || interimTranscript) {
+                    silenceTimer = setTimeout(() => {
+                        if (jarvisMode === 'active' && (transcriptText || interimTranscript)) {
+                            stopListeningAndSend();
+                        }
+                    }, 1500);
+                }
+            }
+        };
+
+        speechRecognition.onerror = (e) => {
+            if (e.error === 'aborted' || e.error === 'no-speech') return;
+            console.warn('Speech recognition error:', e.error);
+        };
+
+        function normalOnEnd() {
+            // Auto-restart unless processing or speaking
+            if (!isProcessing && !isSpeaking) {
+                try { speechRecognition.start(); } catch(e) {}
+            }
+        }
+        speechRecognition.onend = normalOnEnd;
+
+        try { speechRecognition.start(); } catch(e) {}
+    }
+
+    // Manual activation (orb click / spacebar)
+    function startListening() {
+        if (isProcessing) return;
+        unlockAudio();
+        stopSpeaking();
+        jarvisMode = 'active';
+        isListening = true;
+        transcriptText = '';
+        interimTranscript = '';
+        userTranscriptText.textContent = '';
+        startMicAnalyser();
+        setStatus('Listening...', 'listening');
+        document.getElementById('status-sub').textContent = '';
+
+        // Restart recognition fresh
+        if (speechRecognition) {
+            speechRecognition.onend = () => {
+                speechRecognition.onend = () => {
+                    if (!isProcessing && !isSpeaking) {
+                        try { speechRecognition.start(); } catch(e) {}
+                    }
+                };
+                try { speechRecognition.start(); } catch(e) {}
+            };
+            speechRecognition.stop();
+        } else {
+            initRecognition();
+        }
+
+        noInputTimer = setTimeout(() => {
+            if (jarvisMode === 'active' && !transcriptText && !interimTranscript) {
+                returnToWakeWord();
+            }
+        }, 4000);
+    }
+
+    function stopListeningAndSend() {
+        clearTimeout(silenceTimer);
+        clearTimeout(noInputTimer);
+        jarvisMode = 'idle';
+        isListening = false;
+        stopMicAnalyser();
+
+        let finalText = (transcriptText + ' ' + interimTranscript).trim();
+        transcriptText = '';
+        interimTranscript = '';
+        userTranscriptText.textContent = '';
+
+        // Remove ALL wake word occurrences from the text
+        for (const w of WAKE_WORDS) {
+            const regex = new RegExp(w, 'gi');
+            finalText = finalText.replace(regex, '').trim();
+        }
+        // Clean up extra spaces
+        finalText = finalText.replace(/\s+/g, ' ').trim();
+
+        console.log('Sending to AI:', finalText);
+        if (finalText) {
+            sendToAI(finalText);
+        } else {
+            returnToWakeWord();
+        }
+    }
+
+    function stopListening() {
+        clearTimeout(silenceTimer);
+        clearTimeout(noInputTimer);
+        isListening = false;
+        stopMicAnalyser();
+        returnToWakeWord();
+    }
+
+    function returnToWakeWord() {
+        clearTimeout(silenceTimer);
+        clearTimeout(noInputTimer);
+        jarvisMode = 'wake';
+        isListening = false;
+        stopMicAnalyser();
+        setStatus('Say "Hey Jarvis"', 'idle');
+        document.getElementById('status-sub').textContent = '';
+        // Recognition keeps running — just switches mode back to wake
+        // If it died, restart it
+        if (speechRecognition) {
+            try { speechRecognition.start(); } catch(e) {} // might already be running, that's ok
+        } else {
+            initRecognition();
+        }
+    }
+
+    // ============ Dashboard Logging ============
+    const DASHBOARD_KEY = 'jarvis_dashboard';
+    function logChat(userText, assistantText, type) {
+        const data = JSON.parse(localStorage.getItem(DASHBOARD_KEY) || '{"chats":[],"activity":[]}');
+        data.chats.push({ user: userText, assistant: assistantText, timestamp: Date.now(), type: type || 'ask' });
+        if (data.chats.length > 200) data.chats = data.chats.slice(-200);
+        localStorage.setItem(DASHBOARD_KEY, JSON.stringify(data));
+    }
+    function logActivity(text, type) {
+        const data = JSON.parse(localStorage.getItem(DASHBOARD_KEY) || '{"chats":[],"activity":[]}');
+        data.activity.push({ text, type: type || 'ask', timestamp: Date.now() });
+        if (data.activity.length > 500) data.activity = data.activity.slice(-500);
+        localStorage.setItem(DASHBOARD_KEY, JSON.stringify(data));
+    }
+
+    // ============ Smart Features: Timer, Wetter, Erinnerungen, Uhrzeit ============
+    let activeTimers = [];
+    let reminders = JSON.parse(localStorage.getItem('jarvis_reminders') || '[]');
+
+    // Check reminders every 30 seconds
+    setInterval(() => {
+        const now = Date.now();
+        reminders = reminders.filter(r => {
+            if (now >= r.time) {
+                speakText('Erinnerung: ' + r.text);
+                return false;
+            }
+            return true;
+        });
+        localStorage.setItem('jarvis_reminders', JSON.stringify(reminders));
+    }, 30000);
+
+    // Alarm system — uses HTML5 Audio with a generated alarm sound
+    let alarmAudio = null;
+    let alarmActive = false;
+
+    function generateAlarmAudioURL() {
+        const SR = 44100;
+        const dur = 8; // 8 second loop
+        const totalSamples = SR * dur;
+        const buf = new ArrayBuffer(44 + totalSamples * 2);
+        const dv = new DataView(buf);
+
+        // WAV header
+        const ws = (o, s) => { for (let i = 0; i < s.length; i++) dv.setUint8(o + i, s.charCodeAt(i)); };
+        ws(0,'RIFF'); dv.setUint32(4, 36 + totalSamples * 2, true);
+        ws(8,'WAVE'); ws(12,'fmt '); dv.setUint32(16, 16, true);
+        dv.setUint16(20, 1, true); dv.setUint16(22, 1, true);
+        dv.setUint32(24, SR, true); dv.setUint32(28, SR * 2, true);
+        dv.setUint16(32, 2, true); dv.setUint16(34, 16, true);
+        ws(36,'data'); dv.setUint32(40, totalSamples * 2, true);
+
+        // Deep, warm ambient chime — low frequencies, smooth pads
+        // Inspired by iPhone "Silk" / meditation bowl sounds
+        const notes = [
+            // [startTime, freq, duration, volume, type]
+            // Type: 'bell' = warm bell, 'pad' = soft pad, 'sub' = sub bass
+
+            // Opening — deep warm bell
+            [0.0, 262, 2.5, 0.22, 'bell'],   // C4
+            [0.0, 131, 3.0, 0.12, 'sub'],    // C3 sub bass
+            [0.0, 196, 2.0, 0.08, 'pad'],    // G3 pad
+
+            // Second tone
+            [1.2, 294, 2.5, 0.20, 'bell'],   // D4
+            [1.2, 147, 2.5, 0.10, 'sub'],    // D3 sub
+
+            // Third — minor feel, emotional
+            [2.4, 349, 2.8, 0.22, 'bell'],   // F4
+            [2.4, 262, 2.0, 0.08, 'pad'],    // C4 pad
+            [2.4, 175, 2.5, 0.10, 'sub'],    // F3 sub
+
+            // Resolve — warm and open
+            [3.8, 330, 3.5, 0.24, 'bell'],   // E4
+            [3.8, 165, 3.0, 0.12, 'sub'],    // E3 sub
+            [3.8, 247, 2.5, 0.08, 'pad'],    // B3 pad
+
+            // Gentle high shimmer
+            [4.0, 523, 2.5, 0.06, 'bell'],   // C5 (soft, far away)
+
+            // Closing breath
+            [5.5, 262, 2.5, 0.18, 'bell'],   // C4 back to root
+            [5.5, 196, 2.0, 0.07, 'pad'],    // G3
+            [5.5, 131, 2.5, 0.10, 'sub'],    // C3
+        ];
+
+        for (let i = 0; i < totalSamples; i++) {
+            const t = i / SR;
+            let val = 0;
+
+            for (const [start, freq, noteDur, vol, type] of notes) {
+                const nt = t - start;
+                if (nt < 0 || nt > noteDur) continue;
+
+                let tone = 0;
+                const phase = 2 * Math.PI * freq * nt;
+
+                if (type === 'bell') {
+                    // Warm bell: fundamental + detuned partial + soft harmonics
+                    tone = Math.sin(phase) * 0.6;
+                    tone += Math.sin(phase * 2.001) * 0.15;   // slight detune for warmth
+                    tone += Math.sin(phase * 2.998) * 0.08;   // 3rd harmonic
+                    tone += Math.sin(phase * 4.01) * 0.04;    // 4th detuned
+                    tone += Math.sin(phase * 5.99) * 0.02;    // 6th shimmer
+                    // Bell-like decay: fast initial, long tail
+                    const env = Math.exp(-nt * 1.8) * 0.6 + Math.exp(-nt * 0.4) * 0.4;
+                    tone *= env;
+                }
+                else if (type === 'pad') {
+                    // Soft pad: two detuned sines for chorus
+                    tone = Math.sin(phase) * 0.5;
+                    tone += Math.sin(phase * 1.003 + 0.3) * 0.5; // slight detune = chorus
+                    // Slow attack, slow release
+                    const attack = Math.min(1, nt / 0.8);
+                    const release = Math.min(1, (noteDur - nt) / 1.0);
+                    tone *= attack * attack * release * release; // S-curve
+                    // LFO tremolo
+                    tone *= 1 + Math.sin(2 * Math.PI * 0.8 * nt) * 0.15;
+                }
+                else if (type === 'sub') {
+                    // Deep sub bass: pure sine, very slow attack
+                    tone = Math.sin(phase);
+                    const attack = Math.min(1, nt / 0.5);
+                    const release = Math.min(1, (noteDur - nt) / 0.8);
+                    tone *= attack * release;
+                    // Subtle movement
+                    tone *= 1 + Math.sin(2 * Math.PI * 0.3 * nt) * 0.1;
+                }
+
+                val += tone * vol;
+            }
+
+            // Multi-tap reverb for spaciousness
+            const delays = [
+                [Math.floor(SR * 0.08), 0.15],
+                [Math.floor(SR * 0.17), 0.12],
+                [Math.floor(SR * 0.29), 0.08],
+                [Math.floor(SR * 0.43), 0.05],
+                [Math.floor(SR * 0.61), 0.03],
+            ];
+            for (const [d, g] of delays) {
+                if (i > d) {
+                    val += (dv.getInt16(44 + (i - d) * 2, true) / 32767) * g;
+                }
+            }
+
+            // Soft saturation (warmth)
+            val = Math.tanh(val * 1.2) * 0.8;
+
+            dv.setInt16(44 + i * 2, Math.max(-32767, Math.min(32767, val * 32767)), true);
+        }
+
+        const blob = new Blob([buf], { type: 'audio/wav' });
+        return URL.createObjectURL(blob);
+    }
+
+    function startAlarm() {
+        alarmActive = true;
+        const url = generateAlarmAudioURL();
+        alarmAudio = new Audio(url);
+        alarmAudio.loop = true;
+        alarmAudio.play().catch(() => {
+            // If autoplay blocked, use browser TTS as fallback
+            speakText('Dein Timer ist abgelaufen. Sag stopp zum beenden.');
+        });
+
+        blobVolume = 0.8;
+        setStatus('Timer! Say "Stopp"', 'idle');
+    }
+
+    function stopAlarm() {
+        alarmActive = false;
+        if (alarmAudio) {
+            alarmAudio.pause();
+            alarmAudio = null;
+        }
+        blobVolume = 0;
+    }
+
+    function handleSmartCommand(text) {
+        const lower = text.toLowerCase();
+
+        // --- Alarm stoppen (höchste Priorität) ---
+        if (alarmActive && (lower.includes('stopp') || lower.includes('stop') || lower.includes('aus') || lower.includes('okay') || lower.includes('ok'))) {
+            stopAlarm();
+            return 'Alles klar.';
+        }
+
+        // --- Timer ---
+        const timerMatch = lower.match(/timer\s+(?:auf\s+|für\s+|von\s+)?(\d+)\s*(sekunden?|minuten?|stunden?|min|sek|sec|std|h|m|s)/i);
+        if (lower.includes('timer') && timerMatch) {
+            let amount = parseInt(timerMatch[1]);
+            const unit = timerMatch[2].toLowerCase();
+            let ms = 0;
+            let unitName = '';
+            if (unit.startsWith('s')) { ms = amount * 1000; unitName = amount === 1 ? 'Sekunde' : 'Sekunden'; }
+            else if (unit.startsWith('m')) { ms = amount * 60000; unitName = amount === 1 ? 'Minute' : 'Minuten'; }
+            else if (unit.startsWith('h') || unit.startsWith('std')) { ms = amount * 3600000; unitName = amount === 1 ? 'Stunde' : 'Stunden'; }
+
+            const timerId = setTimeout(() => {
+                activeTimers = activeTimers.filter(t => t.id !== timerId);
+                startAlarm();
+            }, ms);
+
+            activeTimers.push({ id: timerId, name: `${amount} ${unitName}`, endsAt: Date.now() + ms });
+            return `Dein ${amount} ${unitName} Timer läuft.`;
+        }
+
+        // Timer stop/cancel
+        if (lower.includes('timer') && (lower.includes('stopp') || lower.includes('abbrech') || lower.includes('lösch') || lower.includes('cancel'))) {
+            if (activeTimers.length === 0) return 'Es läuft kein Timer.';
+            activeTimers.forEach(t => clearTimeout(t.id));
+            activeTimers = [];
+            return 'Alle Timer gelöscht.';
+        }
+
+        // How many timers / timer status
+        if (lower.includes('timer') && (lower.includes('wie viel') || lower.includes('wie lang') || lower.includes('status') || lower.includes('läuft') || lower.includes('noch') || lower.includes('rest'))) {
+            if (activeTimers.length === 0) return 'Es läuft gerade kein Timer.';
+            const list = activeTimers.map(t => {
+                const remaining = Math.max(0, Math.round((t.endsAt - Date.now()) / 1000));
+                const min = Math.floor(remaining / 60);
+                const sec = remaining % 60;
+                const timeStr = min > 0 ? `${min} Minuten und ${sec} Sekunden` : `${sec} Sekunden`;
+                return `Dein ${t.name} Timer geht noch ${timeStr}`;
+            });
+            return list.join('. ');
+        }
+
+        // --- Uhrzeit ---
+        if (lower.includes('wie spät') || lower.includes('uhrzeit') || lower.includes('wie viel uhr')) {
+            const now = new Date();
+            const h = now.getHours();
+            const m = now.getMinutes();
+            return `Es ist ${h} Uhr ${m < 10 ? 'null ' + m : m}.`;
+        }
+
+        // --- Datum ---
+        if (lower.includes('welcher tag') || lower.includes('welches datum') || lower.includes('datum heute') || lower.includes('welchen tag')) {
+            const now = new Date();
+            const days = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
+            const months = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
+            return `Heute ist ${days[now.getDay()]}, der ${now.getDate()}. ${months[now.getMonth()]} ${now.getFullYear()}.`;
+        }
+
+        // --- Wetter ---
+        // Wetter — nicht direkt beantworten, sondern Daten holen und Claude antworten lassen
+        if (lower.includes('wetter') || (lower.includes('regn') && (lower.includes('heute') || lower.includes('morgen') || lower.includes('draußen'))) || (lower.includes('wie warm') && lower.includes('draußen')) || (lower.includes('wie kalt') && lower.includes('draußen')) || (lower.includes('schnei') && (lower.includes('heute') || lower.includes('morgen')))) {
+            return '__WEATHER_AI__';
+        }
+
+        // --- Erinnerung setzen ---
+        const reminderMatch = lower.match(/erinner(?:e|ung)?\s+(?:mich\s+)?(?:in\s+|nach\s+)?(\d+)\s*(sekunden?|minuten?|stunden?|min|sek|std|h|m|s)\s+(?:an\s+|dass\s+|zu\s+)?(.+)/i);
+        if (reminderMatch) {
+            let amount = parseInt(reminderMatch[1]);
+            const unit = reminderMatch[2].toLowerCase();
+            const reminderText = reminderMatch[3].trim();
+            let ms = 0;
+            let unitName = '';
+            if (unit.startsWith('s')) { ms = amount * 1000; unitName = amount === 1 ? 'Sekunde' : 'Sekunden'; }
+            else if (unit.startsWith('m')) { ms = amount * 60000; unitName = amount === 1 ? 'Minute' : 'Minuten'; }
+            else if (unit.startsWith('h') || unit.startsWith('std')) { ms = amount * 3600000; unitName = amount === 1 ? 'Stunde' : 'Stunden'; }
+
+            reminders.push({ text: reminderText, time: Date.now() + ms });
+            localStorage.setItem('jarvis_reminders', JSON.stringify(reminders));
+            return `Ich erinnere dich in ${amount} ${unitName} an: ${reminderText}.`;
+        }
+
+        // --- Würfeln ---
+        if (lower.includes('würfel') || lower.includes('zufallszahl') || lower.includes('random')) {
+            const num = Math.floor(Math.random() * 6) + 1;
+            return `Ich habe eine ${num} gewürfelt.`;
+        }
+
+        // --- Münze werfen ---
+        if (lower.includes('münze') || lower.includes('coin flip') || lower.includes('kopf oder zahl')) {
+            return Math.random() > 0.5 ? 'Kopf.' : 'Zahl.';
+        }
+
+        // --- Mathe ---
+        const mathMatch = lower.match(/(?:was ist|berechne|rechne)\s+([\d\s+\-*/().,%]+)/i);
+        if (mathMatch) {
+            try {
+                const expr = mathMatch[1].replace(/,/g, '.').replace(/%/g, '/100');
+                const result = Function('"use strict"; return (' + expr + ')')();
+                return `Das Ergebnis ist ${String(result).replace('.', ' Komma ')}.`;
+            } catch(e) {
+                return null; // let AI handle it
+            }
+        }
+
+        return null; // not a smart command
+    }
+
+    // Wetter API — holt aktuelle Daten + Vorhersage
+    async function getWeatherData() {
+        try {
+            const lat = 52.4034;
+            const lon = 13.2594;
+
+            const weatherRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code,wind_speed_10m,relative_humidity_2m&daily=temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max&timezone=auto&forecast_days=3`);
+            const w = await weatherRes.json();
+
+            const descriptions = {
+                0: 'klar', 1: 'überwiegend klar', 2: 'teilweise bewölkt', 3: 'bewölkt',
+                45: 'neblig', 48: 'neblig', 51: 'leichter Nieselregen', 53: 'Nieselregen',
+                55: 'starker Nieselregen', 61: 'leichter Regen', 63: 'Regen', 65: 'starker Regen',
+                71: 'leichter Schneefall', 73: 'Schneefall', 75: 'starker Schneefall',
+                80: 'Regenschauer', 81: 'starke Regenschauer', 95: 'Gewitter'
+            };
+
+            return `Standort: Teltow. Aktuell: ${Math.round(w.current.temperature_2m)}°C, ${descriptions[w.current.weather_code] || 'unbekannt'}, Wind ${Math.round(w.current.wind_speed_10m)} km/h, Luftfeuchtigkeit ${w.current.relative_humidity_2m}%. Heute: ${Math.round(w.daily.temperature_2m_min[0])}–${Math.round(w.daily.temperature_2m_max[0])}°C, ${descriptions[w.daily.weather_code[0]] || ''}, Regenwahrscheinlichkeit ${w.daily.precipitation_probability_max[0]}%. Morgen: ${Math.round(w.daily.temperature_2m_min[1])}–${Math.round(w.daily.temperature_2m_max[1])}°C, ${descriptions[w.daily.weather_code[1]] || ''}, Regenwahrscheinlichkeit ${w.daily.precipitation_probability_max[1]}%.`;
+        } catch(e) {
+            return null;
+        }
+    }
+
+    // ============ Spotify Voice Commands ============
+    const SPOTIFY_COMMANDS = [
+        { patterns: ['spiele '], action: 'play' },
+        { patterns: ['stopp', 'stop', 'pause', 'musik aus', 'hör auf'], action: 'pause' },
+        { patterns: ['weiter', 'fortsetzen', 'weiterspielen', 'resume'], action: 'resume' },
+        { patterns: ['skip', 'nächster', 'nächstes', 'überspringen', 'next'], action: 'skip' },
+        { patterns: ['vorheriger', 'vorheriges', 'zurück', 'previous'], action: 'previous' },
+        { patterns: ['lauter', 'louder', 'volume up'], action: 'volume_up' },
+        { patterns: ['leiser', 'quieter', 'volume down'], action: 'volume_down' },
+        { patterns: ['was läuft', 'welcher song', 'welches lied'], action: 'current' },
+    ];
+
+    let currentVolume = 50;
+
+    async function handleSpotifyCommand(text) {
+        const lower = text.toLowerCase();
+        console.log('handleSpotifyCommand called with:', lower);
+
+        // Check if any command pattern matches first
+        let matchedCmd = null;
+        let matchedPattern = null;
+        for (const cmd of SPOTIFY_COMMANDS) {
+            const found = cmd.patterns.find(p => lower.includes(p));
+            if (found) { matchedCmd = cmd; matchedPattern = found; break; }
+        }
+
+        // Not a Spotify command at all — return null to pass to AI
+        if (!matchedCmd) {
+            console.log('No Spotify command matched');
+            return null;
+        }
+
+        console.log('Spotify command matched:', matchedCmd.action, matchedPattern);
+
+        // It IS a Spotify command — now check if connected
+        let spotifyConnected = false;
+        try {
+            const status = await fetch('/api/spotify/status');
+            const data = await status.json();
+            spotifyConnected = data.connected;
+        } catch(e) {
+            console.warn('Spotify status check failed:', e);
+        }
+        console.log('Spotify connected:', spotifyConnected);
+
+        if (!spotifyConnected) return 'Spotify ist nicht verbunden. Bitte zuerst einloggen.';
+
+        const cmd = matchedCmd;
+        const matched = matchedPattern;
+
+            try {
+                if (cmd.action === 'play') {
+                    const query = lower.split(matched)[1]?.trim();
+                    if (!query) {
+                        await fetch('/api/spotify/play', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({}) });
+                        return 'Musik wird fortgesetzt.';
+                    }
+                    // Detect type
+                    let type = 'track';
+                    let cleanQuery = query;
+                    if (query.includes('playlist')) { type = 'playlist'; cleanQuery = query.replace('playlist', '').trim(); }
+                    else if (query.includes('von') || query.includes('from')) { type = 'artist'; cleanQuery = query.replace(/von|from/g, '').trim(); }
+
+                    // First search without playing
+                    const searchRes = await fetch('/api/spotify/play', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ query: cleanQuery, type, searchOnly: true }) });
+                    const data = await searchRes.json();
+                    if (data.error) return 'Konnte nichts finden für ' + cleanQuery;
+
+                    // Announce what will be played
+                    let announcement = 'Musik wird gestartet.';
+                    if (data.name && data.artist) announcement = `Spiele ${data.name} von ${data.artist}.`;
+                    else if (data.name) announcement = `Spiele ${data.name}.`;
+
+                    // Speak first, wait 4 seconds, then play
+                    speakText(announcement);
+                    await new Promise(resolve => setTimeout(resolve, 4000));
+                    await fetch('/api/spotify/play', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ query: cleanQuery, type }) });
+                    return '__HANDLED__'; // already spoken
+                }
+                else if (cmd.action === 'pause') {
+                    await fetch('/api/spotify/pause', { method: 'POST' });
+                    return 'Musik pausiert.';
+                }
+                else if (cmd.action === 'resume') {
+                    await fetch('/api/spotify/play', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({}) });
+                    return 'Musik wird fortgesetzt.';
+                }
+                else if (cmd.action === 'skip') {
+                    await fetch('/api/spotify/skip', { method: 'POST' });
+                    return 'Nächster Song.';
+                }
+                else if (cmd.action === 'previous') {
+                    await fetch('/api/spotify/previous', { method: 'POST' });
+                    return 'Vorheriger Song.';
+                }
+                else if (cmd.action === 'volume_up') {
+                    currentVolume = Math.min(100, currentVolume + 15);
+                    await fetch('/api/spotify/volume', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ volume: currentVolume }) });
+                    return `Lautstärke auf ${currentVolume} Prozent.`;
+                }
+                else if (cmd.action === 'volume_down') {
+                    currentVolume = Math.max(0, currentVolume - 15);
+                    await fetch('/api/spotify/volume', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ volume: currentVolume }) });
+                    return `Lautstärke auf ${currentVolume} Prozent.`;
+                }
+                else if (cmd.action === 'current') {
+                    const res = await fetch('/api/spotify/current');
+                    const data = await res.json();
+                    if (!data.playing) return 'Gerade läuft nichts.';
+                    return `Gerade läuft ${data.name} von ${data.artist}.`;
+                }
+            } catch(e) {
+                console.warn('Spotify command failed:', e);
+                return 'Spotify Fehler. Bitte versuche es nochmal.';
+            }
+        return null;
+    }
+
+    // ============ AI Chat ============
+    const JARVIS_SYSTEM_PROMPT = 'Du bist Jarvis, ein Voice Assistant. REGELN: Antworte DIREKT auf die Frage. Keine Einleitung, keine Selbstreferenz, kein Meta-Kommentar. Sag NIEMALS dass du Retrac bist oder ein Text-basiertes System. Du bist Jarvis. Kurz, 1-3 Sätze. Gleiche Sprache wie der User. Kein Markdown. Deine Antwort wird vorgelesen. Schreibe Jahreszahlen und Zahlen als Ziffern. Schreibe nur Abkürzungen aus. Korrekte Rechtschreibung. Bei Wetter und Vorhersagen: Nutze Wahrscheinlichkeiten statt absolute Aussagen. Sag "wahrscheinlich", "es sieht danach aus", "mit einer Wahrscheinlichkeit von X Prozent" statt "ja es wird regnen". Sei ehrlich wenn etwas unsicher ist.';
+
+    async function sendToAI(text) {
+        isProcessing = true;
+
+        // Check smart commands first (timer, etc.)
+        let smartResponse = handleSmartCommand(text);
+        if (smartResponse === '__WEATHER_AI__') {
+            // Fetch weather data and let Claude answer the question with context
+            const weatherData = await getWeatherData();
+            if (weatherData) {
+                conversationMessages.push({ role: 'user', content: text });
+                // Inject weather context into this specific request
+                const weatherMessages = [
+                    { role: 'user', content: `[Wetterdaten für Kontext: ${weatherData}]\n\nFrage: ${text}` }
+                ];
+                addHistoryBubble('user', text);
+                setStatus('Thinking...', 'thinking');
+
+                let fullResponse = '';
+                await RetracAPI.streamChat({
+                    model: selectedModel,
+                    messages: weatherMessages,
+                    systemPrompt: JARVIS_SYSTEM_PROMPT,
+                    onThinking: () => {},
+                    onText: (chunk) => { fullResponse += chunk; aiResponseText.textContent = fullResponse; },
+                    onError: () => { isProcessing = false; returnToWakeWord(); },
+                    onDone: () => {
+                        isProcessing = false;
+                        conversationMessages.push({ role: 'assistant', content: fullResponse });
+                        addHistoryBubble('assistant', fullResponse);
+                        if (autoSpeak && fullResponse) speakText(fullResponse);
+                        else returnToWakeWord();
+                    },
+                    onActivity: () => {},
+                    onSources: () => {}
+                });
+                return;
+            }
+            smartResponse = null; // weather fetch failed, let Claude handle it
+        }
+        if (smartResponse) {
+            isProcessing = false;
+            aiResponseText.textContent = smartResponse;
+            addHistoryBubble('user', text);
+            addHistoryBubble('assistant', smartResponse);
+            // Detect type for logging
+            const lt = lower.includes('timer') ? 'timer' : lower.includes('wetter') || lower.includes('regn') ? 'weather' : lower.includes('erinner') ? 'reminder' : 'ask';
+            logChat(text, smartResponse, lt);
+            logActivity(text, lt);
+            speakText(smartResponse);
+            return;
+        }
+
+        // Check for Spotify commands
+        const spotifyResponse = await handleSpotifyCommand(text);
+        if (spotifyResponse !== null) {
+            isProcessing = false;
+            if (spotifyResponse === '__HANDLED__') {
+                addHistoryBubble('user', text);
+                logChat(text, 'Playing...', 'music');
+                logActivity('Spotify: ' + text, 'music');
+            } else {
+                aiResponseText.textContent = spotifyResponse;
+                addHistoryBubble('user', text);
+                addHistoryBubble('assistant', spotifyResponse);
+                logChat(text, spotifyResponse, 'music');
+                logActivity('Spotify: ' + spotifyResponse, 'music');
+                speakText(spotifyResponse);
+            }
+            return;
+        }
+
+        setStatus('Thinking...', 'thinking');
+        document.getElementById('status-sub').textContent = '';
+        aiResponseText.textContent = '';
+        conversationMessages.push({ role: 'user', content: text });
+        addHistoryBubble('user', text);
+
+        let fullResponse = '';
+        let ttsPreloading = false; // how much text we've already queued for TTS
+        let preloadedBlob = null;
+
+        // Pre-generate TTS as soon as first sentence arrives
+        function tryPreloadTTS() {
+            if (ttsPreloading) return;
+            if (fullResponse.match(/[.!?]/)) {
+                ttsPreloading = true;
+                fetch('/api/tts', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: fullResponse, voice: 'de-DE-FlorianMultilingualNeural' })
+                }).then(r => r.blob()).then(blob => {
+                    preloadedBlob = blob;
+                }).catch(() => {});
+            }
+        }
+
+        const messages = conversationMessages.map(m => ({ role: m.role, content: m.content }));
+
+        await RetracAPI.streamChat({
+            model: selectedModel,
+            messages: messages,
+            systemPrompt: JARVIS_SYSTEM_PROMPT,
+            onThinking: () => {},
+            onText: (chunk) => {
+                fullResponse += chunk;
+                aiResponseText.textContent = fullResponse;
+                tryPreloadTTS();
+            },
+            onError: (err) => {
+                setStatus('Error', 'error');
+                aiResponseText.textContent = 'Error: ' + err;
+                isProcessing = false;
+                returnToWakeWord();
+            },
+            onDone: () => {
+                isProcessing = false;
+                conversationMessages.push({ role: 'assistant', content: fullResponse });
+                addHistoryBubble('assistant', fullResponse);
+                logChat(text, fullResponse, 'ask');
+                logActivity(text, 'ask');
+                if (!autoSpeak || !fullResponse) { returnToWakeWord(); return; }
+                // Use full response TTS (more accurate than preloaded partial)
+                speakText(fullResponse);
+            },
+            onActivity: () => {},
+            onSources: () => {}
+        });
+    }
+
+    // ============ Text-to-Speech (Edge TTS via server) ============
+    let currentAudio = null;
+    let speakPulseId = null;
+
+    async function speakText(text) {
+        const cleanText = text
+            .replace(/```[\s\S]*?```/g, '')
+            .replace(/`[^`]+`/g, '')
+            .replace(/\*\*([^*]+)\*\*/g, '$1')
+            .replace(/\*([^*]+)\*/g, '$1')
+            .replace(/#+\s/g, '')
+            .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+            .replace(/[-*]\s/g, '')
+            .trim();
+        if (!cleanText) { returnToWakeWord(); return; }
+
+        isSpeaking = true;
+        setStatus('Speaking...', 'speaking');
+        speakPulseId = setInterval(() => {
+            blobVolume = 0.35 + Math.sin(Date.now() * 0.012) * 0.2 + Math.sin(Date.now() * 0.031) * 0.15 + Math.random() * 0.1;
+        }, 30);
+
+        function onSpeakDone() {
+            if (speakPulseId) clearInterval(speakPulseId);
+            speakPulseId = null;
+            blobVolume = 0;
+            isSpeaking = false;
+            currentAudio = null;
+            returnToWakeWord();
+        }
+
+        function fallbackBrowserTTS() {
+            if (speakPulseId) clearInterval(speakPulseId);
+            speakPulseId = setInterval(() => {
+                blobVolume = 0.35 + Math.sin(Date.now() * 0.012) * 0.2 + Math.sin(Date.now() * 0.031) * 0.15 + Math.random() * 0.1;
+            }, 30);
+            const u = new SpeechSynthesisUtterance(cleanText);
+            u.lang = navigator.language || 'de-DE';
+            u.rate = 0.9;
+            u.pitch = 0.85;
+            u.onend = onSpeakDone;
+            u.onerror = onSpeakDone;
+            speechSynthesis.speak(u);
+        }
+
+        // Try Edge TTS first, but if audio is locked use browser TTS directly
+        if (!audioUnlocked) {
+            // Audio not unlocked yet — skip Edge TTS, use browser TTS directly
+            fallbackBrowserTTS();
+            return;
+        }
+
+        try {
+            const res = await fetch('/api/tts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: cleanText, voice: 'de-DE-FlorianMultilingualNeural' })
+            });
+            if (!res.ok) throw new Error('TTS failed');
+
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            currentAudio = new Audio(url);
+            currentAudio.onended = () => { URL.revokeObjectURL(url); onSpeakDone(); };
+            currentAudio.onerror = () => { URL.revokeObjectURL(url); onSpeakDone(); };
+            currentAudio.play().catch(() => {
+                console.warn('Autoplay blocked, using browser TTS');
+                URL.revokeObjectURL(url);
+                currentAudio = null;
+                fallbackBrowserTTS();
+            });
+        } catch (err) {
+            console.warn('Edge TTS failed:', err);
+            fallbackBrowserTTS();
+        }
+    }
+
+    function stopSpeaking() {
+        if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+        if (speechSynthesis) speechSynthesis.cancel();
+        if (speakPulseId) clearInterval(speakPulseId);
+        speakPulseId = null;
+        isSpeaking = false;
+        blobVolume = 0;
+    }
+
+    // ============ Status ============
+    function setStatus(text, state) {
+        statusText.textContent = text;
+    }
+
+    // ============ Orb Click ============
+    document.getElementById('orb-overlay').addEventListener('click', () => {
+        unlockAudio(); // Always unlock audio on click
+        if (isSpeaking) { stopSpeaking(); returnToWakeWord(); return; }
+        if (isProcessing) return;
+        if (isListening) {
+            stopListeningAndSend();
+        } else {
+            startListening();
+        }
+    });
+
+    // Space to toggle
+    document.addEventListener('keydown', (e) => {
+        if (e.code === 'Space' && !e.target.closest('input, textarea, button, [contenteditable]')) {
+            e.preventDefault();
+            orb.click();
+        }
+    });
+
+    // ============ History Bubbles ============
+    function addHistoryBubble(role, text) {
+        const div = document.createElement('div');
+        div.className = 'fade-in';
+        if (role === 'user') {
+            div.innerHTML = `<div class="flex justify-end"><div class="bg-[#2563eb] text-white text-[14px] px-4 py-2.5 rounded-2xl rounded-br-md max-w-[85%] leading-relaxed">${escapeHtml(text)}</div></div>`;
+        } else {
+            div.innerHTML = `<div class="flex justify-start"><div class="bg-[#2a2a2a] text-[#d1d5db] text-[14px] px-4 py-2.5 rounded-2xl rounded-bl-md max-w-[85%] leading-relaxed">${escapeHtml(text)}</div></div>`;
+        }
+        historyMessages.appendChild(div);
+        historyMessages.scrollTop = historyMessages.scrollHeight;
+    }
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    // ============ Interactive 3D Blob (Ultra-Detail) ============
+    (function() {
+        const canvas = document.getElementById('blob-canvas');
+        const dpr = window.devicePixelRatio || 1;
+        const SIZE = 500;
+        canvas.width = SIZE * dpr;
+        canvas.height = SIZE * dpr;
+        canvas.style.width = SIZE + 'px';
+        canvas.style.height = SIZE + 'px';
+        const ctx = canvas.getContext('2d');
+        ctx.scale(dpr, dpr);
+        const W = SIZE, H = SIZE;
+        const cx = W / 2, cy = H / 2;
+        const baseRadius = 170;
+        let mouseX = 0, mouseY = 0;
+        let tMouseX = 0, tMouseY = 0;
+        let time = 0;
+
+        const orbEl = document.getElementById('orb');
+        orbEl.style.width = SIZE + 'px';
+        orbEl.style.height = SIZE + 'px';
+
+        orbEl.addEventListener('mousemove', (e) => {
+            const r = canvas.getBoundingClientRect();
+            tMouseX = (e.clientX - r.left - r.width / 2) / (r.width / 2);
+            tMouseY = (e.clientY - r.top - r.height / 2) / (r.height / 2);
+        });
+        orbEl.addEventListener('mouseleave', () => { tMouseX = 0; tMouseY = 0; });
+
+        // --- Permutation table for value noise ---
+        const perm = new Uint8Array(512);
+        (function() {
+            const p = new Uint8Array(256);
+            for (let i = 0; i < 256; i++) p[i] = i;
+            for (let i = 255; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [p[i], p[j]] = [p[j], p[i]]; }
+            for (let i = 0; i < 512; i++) perm[i] = p[i & 255];
+        })();
+
+        function fade(t) { return t * t * t * (t * (t * 6 - 15) + 10); }
+        function lerp(a, b, t) { return a + t * (b - a); }
+
+        function grad1d(hash, x) {
+            return (hash & 1) === 0 ? x : -x;
+        }
+
+        // 2D value noise
+        function noise2d(x, y) {
+            const X = Math.floor(x) & 255, Y = Math.floor(y) & 255;
+            const xf = x - Math.floor(x), yf = y - Math.floor(y);
+            const u = fade(xf), v = fade(yf);
+            const a = perm[X] + Y, b = perm[X + 1] + Y;
+            const aa = perm[a], ab = perm[a + 1], ba = perm[b], bb = perm[b + 1];
+            return lerp(
+                lerp(grad1d(perm[aa], xf) + grad1d(perm[ab], yf), grad1d(perm[ba], xf - 1) + grad1d(perm[bb], yf), u),
+                lerp(grad1d(perm[aa + 1], xf) + grad1d(perm[ab + 1], yf - 1), grad1d(perm[ba + 1], xf - 1) + grad1d(perm[bb + 1], yf - 1), u),
+                v
+            ) * 0.5;
+        }
+
+        // Fractal Brownian Motion — 8 octaves
+        function fbm(x, y) {
+            let v = 0, amp = 1, freq = 1, total = 0;
+            for (let i = 0; i < 8; i++) {
+                v += noise2d(x * freq, y * freq) * amp;
+                total += amp;
+                amp *= 0.5;
+                freq *= 2.1;
+            }
+            return v / total;
+        }
+
+        // Get blob contour — few control points, deep soft lobes
+        function getBlob() {
+            const pts = [];
+            const N = 16;
+            const vol = blobVolume; // 0-1
+            for (let i = 0; i < N; i++) {
+                const a = (i / N) * Math.PI * 2;
+                const nx = Math.cos(a) * 1.2 + time * 0.3;
+                const ny = Math.sin(a) * 1.2 + time * 0.2;
+
+                // Deformation scales with volume — silent = perfect circle
+                let d = fbm(nx, ny) * 140 * vol;
+                d += fbm(nx * 1.4 + 7, ny * 1.4 + 7 + time * 0.12) * 60 * vol;
+
+                const dx = Math.cos(a), dy = Math.sin(a);
+                d += (dx * mouseX + dy * mouseY) * 22;
+
+                const r = baseRadius + d;
+                pts.push({ x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r });
+            }
+            return pts;
+        }
+
+        // Catmull-Rom spline through points for buttery smooth curves
+        function drawShape(pts) {
+            ctx.beginPath();
+            const n = pts.length;
+            for (let i = 0; i < n; i++) {
+                const p0 = pts[(i - 1 + n) % n];
+                const p1 = pts[i];
+                const p2 = pts[(i + 1) % n];
+                const p3 = pts[(i + 2) % n];
+                const steps = 30;
+                for (let s = 0; s < steps; s++) {
+                    const t = s / steps;
+                    const t2 = t * t, t3 = t2 * t;
+                    const x = 0.5 * ((2 * p1.x) + (-p0.x + p2.x) * t + (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * t2 + (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * t3);
+                    const y = 0.5 * ((2 * p1.y) + (-p0.y + p2.y) * t + (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * t2 + (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * t3);
+                    if (i === 0 && s === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+            }
+            ctx.closePath();
+        }
+
+        // Radial gradient helper
+        function rg(x, y, r1, r2) { return ctx.createRadialGradient(x, y, r1, x, y, r2); }
+
+        let smoothVol = 0;
+        function draw() {
+            updateVolume();
+            // Smooth volume for scale pulsation
+            smoothVol += (blobVolume - smoothVol) * 0.15;
+            // Time only advances with sound
+            time += blobVolume * 0.03;
+            mouseX += (tMouseX - mouseX) * 0.06;
+            mouseY += (tMouseY - mouseY) * 0.06;
+
+            // Scale pulsation: louder = bigger blob
+            const pulse = 1 + smoothVol * 0.35;
+            ctx.clearRect(0, 0, W, H);
+            ctx.save();
+            ctx.translate(cx, cy);
+            ctx.scale(pulse, pulse);
+            ctx.translate(-cx, -cy);
+
+            // Ambient glow
+            let g = rg(cx, cy, baseRadius * 0.2, baseRadius * 1.8);
+            g.addColorStop(0, 'rgba(210,200,255,0.07)');
+            g.addColorStop(0.5, 'rgba(180,200,255,0.03)');
+            g.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle = g;
+            ctx.fillRect(0, 0, W, H);
+
+            // Drop shadow
+            g = rg(cx + 3, cy + 25, 20, baseRadius * 1.05);
+            g.addColorStop(0, 'rgba(0,0,0,0.15)');
+            g.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle = g;
+            ctx.fillRect(0, 0, W, H);
+
+            const pts = getBlob();
+
+            // === Main body ===
+            ctx.save();
+            drawShape(pts);
+
+            // Base: white sphere with purple edge falloff
+            g = ctx.createRadialGradient(cx - 35 + mouseX * 30, cy - 45 + mouseY * 25, 10, cx + 5, cy + 8, baseRadius + 5);
+            g.addColorStop(0, '#ffffff');
+            g.addColorStop(0.2, '#fdfdff');
+            g.addColorStop(0.42, '#f3f0fa');
+            g.addColorStop(0.6, '#ebe2f4');
+            g.addColorStop(0.78, '#ddd0ea');
+            g.addColorStop(0.9, '#cfbddf');
+            g.addColorStop(1, '#c0a8d4');
+            ctx.fillStyle = g;
+            ctx.fill();
+            ctx.clip();
+
+            // --- Subsurface scattering colors ---
+
+            // Cyan pool 1
+            let sx = cx - 30 + Math.cos(time * 0.5) * 45 + mouseX * 20;
+            let sy = cy - 40 + Math.sin(time * 0.6) * 35 + mouseY * 12;
+            g = rg(sx, sy, 0, 85);
+            g.addColorStop(0, 'rgba(0,225,235,0.4)');
+            g.addColorStop(0.3, 'rgba(40,235,245,0.22)');
+            g.addColorStop(0.65, 'rgba(80,240,255,0.06)');
+            g.addColorStop(1, 'rgba(80,240,255,0)');
+            ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+
+            // Cyan pool 2
+            sx = cx + 60 + Math.cos(time * 0.38 + 2) * 30;
+            sy = cy - 15 + Math.sin(time * 0.5 + 1.5) * 35;
+            g = rg(sx, sy, 0, 55);
+            g.addColorStop(0, 'rgba(0,215,240,0.32)');
+            g.addColorStop(0.5, 'rgba(0,215,240,0.1)');
+            g.addColorStop(1, 'rgba(0,215,240,0)');
+            ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+
+            // Cyan 3 (small, sharp)
+            sx = cx + 15 + Math.cos(time * 0.7 + 4) * 50;
+            sy = cy - 55 + Math.sin(time * 0.55 + 3) * 25;
+            g = rg(sx, sy, 0, 35);
+            g.addColorStop(0, 'rgba(0,240,220,0.28)');
+            g.addColorStop(1, 'rgba(0,240,220,0)');
+            ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+
+            // Teal (top)
+            sx = cx + 5 + Math.cos(time * 0.3 + 5) * 40;
+            sy = cy - 65 + Math.sin(time * 0.4 + 3) * 18;
+            g = rg(sx, sy, 0, 65);
+            g.addColorStop(0, 'rgba(0,255,195,0.2)');
+            g.addColorStop(0.5, 'rgba(0,255,195,0.06)');
+            g.addColorStop(1, 'rgba(0,255,195,0)');
+            ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+
+            // Pink wash (bottom)
+            sx = cx + Math.sin(time * 0.28) * 35;
+            sy = cy + 60 + Math.cos(time * 0.22) * 18;
+            g = rg(sx, sy, 0, 120);
+            g.addColorStop(0, 'rgba(235,115,225,0.35)');
+            g.addColorStop(0.25, 'rgba(215,125,235,0.2)');
+            g.addColorStop(0.55, 'rgba(195,130,215,0.08)');
+            g.addColorStop(1, 'rgba(195,130,215,0)');
+            ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+
+            // Violet (lower-left)
+            sx = cx - 55 + Math.cos(time * 0.25 + 4) * 25;
+            sy = cy + 45 + Math.sin(time * 0.32 + 2) * 22;
+            g = rg(sx, sy, 0, 80);
+            g.addColorStop(0, 'rgba(155,95,225,0.22)');
+            g.addColorStop(0.5, 'rgba(155,95,225,0.07)');
+            g.addColorStop(1, 'rgba(155,95,225,0)');
+            ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+
+            // Warm pink (right side)
+            sx = cx + 70 + Math.cos(time * 0.33 + 1) * 20;
+            sy = cy + 25 + Math.sin(time * 0.4 + 5) * 25;
+            g = rg(sx, sy, 0, 65);
+            g.addColorStop(0, 'rgba(255,140,200,0.18)');
+            g.addColorStop(1, 'rgba(255,140,200,0)');
+            ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+
+            // === Specular highlights ===
+
+            // Main spec (top-left, big soft)
+            sx = cx - 48 + mouseX * 30;
+            sy = cy - 58 + mouseY * 22;
+            g = rg(sx, sy, 0, 75);
+            g.addColorStop(0, 'rgba(255,255,255,0.97)');
+            g.addColorStop(0.1, 'rgba(255,255,255,0.7)');
+            g.addColorStop(0.3, 'rgba(255,255,255,0.25)');
+            g.addColorStop(0.6, 'rgba(255,255,255,0.05)');
+            g.addColorStop(1, 'rgba(255,255,255,0)');
+            ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+
+            // Sharp spec (smaller, bright core)
+            sx = cx - 62 + mouseX * 18;
+            sy = cy - 72 + mouseY * 14;
+            g = rg(sx, sy, 0, 22);
+            g.addColorStop(0, 'rgba(255,255,255,0.95)');
+            g.addColorStop(0.4, 'rgba(255,255,255,0.3)');
+            g.addColorStop(1, 'rgba(255,255,255,0)');
+            ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+
+            // Secondary spec (top-right, subtle)
+            sx = cx + 40 + mouseX * 12;
+            sy = cy - 50 + mouseY * 10;
+            g = rg(sx, sy, 0, 40);
+            g.addColorStop(0, 'rgba(255,255,255,0.2)');
+            g.addColorStop(0.5, 'rgba(255,255,255,0.05)');
+            g.addColorStop(1, 'rgba(255,255,255,0)');
+            ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+
+            // Rim light (bottom-right)
+            sx = cx + 65 + mouseX * 12;
+            sy = cy + 60 + mouseY * 12;
+            g = rg(sx, sy, 15, 85);
+            g.addColorStop(0, 'rgba(255,255,255,0.14)');
+            g.addColorStop(1, 'rgba(255,255,255,0)');
+            ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+
+            // Rim light 2 (left)
+            sx = cx - 75 + mouseX * 8;
+            sy = cy + 10 + mouseY * 8;
+            g = rg(sx, sy, 10, 60);
+            g.addColorStop(0, 'rgba(220,210,255,0.1)');
+            g.addColorStop(1, 'rgba(220,210,255,0)');
+            ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+
+            // Edge depth
+            g = rg(cx, cy, baseRadius * 0.55, baseRadius + 10);
+            g.addColorStop(0, 'rgba(0,0,0,0)');
+            g.addColorStop(0.82, 'rgba(0,0,0,0)');
+            g.addColorStop(0.94, 'rgba(0,0,0,0.05)');
+            g.addColorStop(1, 'rgba(0,0,0,0.12)');
+            ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+
+            ctx.restore();
+
+            // Outer bloom
+            ctx.save();
+            drawShape(pts);
+            ctx.globalCompositeOperation = 'screen';
+            g = rg(cx, cy, baseRadius * 0.75, baseRadius * 1.3);
+            g.addColorStop(0, 'rgba(0,0,0,0)');
+            g.addColorStop(0.75, 'rgba(0,0,0,0)');
+            g.addColorStop(0.92, 'rgba(200,190,255,0.05)');
+            g.addColorStop(1, 'rgba(200,190,255,0.1)');
+            ctx.fillStyle = g;
+            ctx.fill();
+            ctx.restore();
+
+            ctx.restore(); // close pulse scale transform
+            requestAnimationFrame(draw);
+        }
+
+        draw();
+    })();
+
+    // Load voices
+    if (speechSynthesis) {
+        speechSynthesis.getVoices();
+        speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices();
+    }
+
+    // ============ Unlock audio ============
+    let audioUnlocked = false;
+    function unlockAudio() {
+        if (audioUnlocked) return;
+        audioUnlocked = true;
+        // Unlock AudioContext
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const buf = ctx.createBuffer(1, 1, 22050);
+        const src = ctx.createBufferSource();
+        src.buffer = buf;
+        src.connect(ctx.destination);
+        src.start(0);
+        ctx.resume();
+        // Unlock HTML5 Audio by playing silent audio
+        const silentAudio = new Audio('data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=');
+        silentAudio.play().catch(() => {});
+        // Pre-warm the TTS pipeline
+        fetch('/api/tts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: 'OK', voice: 'de-DE-FlorianMultilingualNeural' })
+        }).catch(() => {});
+        console.log('Audio unlocked');
+    }
+    document.addEventListener('click', unlockAudio);
+    document.addEventListener('keydown', unlockAudio);
+    document.addEventListener('touchstart', unlockAudio);
+
+    // ============ Page load — start immediately ============
+    setStatus('Say "Hey Jarvis"', 'idle');
+    document.getElementById('status-sub').textContent = 'or tap the orb';
+    setTimeout(() => {
+        initRecognition();
+        initSpotifyPlayer();
+    }, 500);
+
+    // ============ Spotify Web Playback SDK ============
+    let spotifyPlayer = null;
+    let spotifyDeviceId = null;
+
+    async function initSpotifyPlayer() {
+        // Get access token from server
+        try {
+            const res = await fetch('/api/spotify/token');
+            const data = await res.json();
+            if (!data.accessToken) return;
+
+            window.onSpotifyWebPlaybackSDKReady = () => {};
+
+            spotifyPlayer = new Spotify.Player({
+                name: 'Retrac Jarvis',
+                getOAuthToken: async cb => {
+                    // Always get fresh token
+                    const r = await fetch('/api/spotify/token');
+                    const d = await r.json();
+                    cb(d.accessToken);
+                },
+                volume: 0.5
+            });
+
+            spotifyPlayer.addListener('ready', ({ device_id }) => {
+                spotifyDeviceId = device_id;
+                console.log('Spotify Player ready, device:', device_id);
+                // Transfer playback to this device
+                fetch('/api/spotify/transfer', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ deviceId: device_id })
+                });
+            });
+
+            spotifyPlayer.addListener('not_ready', () => {
+                console.log('Spotify Player not ready');
+                spotifyDeviceId = null;
+            });
+
+            spotifyPlayer.addListener('initialization_error', ({ message }) => console.warn('Spotify init error:', message));
+            spotifyPlayer.addListener('authentication_error', ({ message }) => console.warn('Spotify auth error:', message));
+            spotifyPlayer.addListener('account_error', ({ message }) => console.warn('Spotify account error:', message));
+
+            spotifyPlayer.connect();
+        } catch(e) {
+            console.warn('Spotify player init failed:', e);
+        }
+    }
+
+    // ============ Auth & Sidebar Profile ============
+    function showLoggedInUI(user) {
+        const sidebarAuth = document.getElementById('sidebar-auth');
+        if (!sidebarAuth) return;
+        const userEmail = user.email;
+        const userName = user.name || userEmail.split('@')[0];
+        const initial = userName[0].toUpperCase();
+        const avatarHTML = user.picture
+            ? `<img src="${user.picture}" class="w-9 h-9 rounded-full object-cover shrink-0" referrerpolicy="no-referrer" />`
+            : `<div class="w-9 h-9 rounded-full bg-[#333] flex items-center justify-center text-white text-[14px] font-semibold shrink-0">${initial}</div>`;
+
+        sidebarAuth.innerHTML = `
+            <div class="go-pro-card bg-[#2D8CFF] rounded-2xl p-4 flex items-center justify-between mb-3 cursor-pointer hover:brightness-110 transition">
+                <div class="flex items-center gap-3">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="white" stroke="none">
+                        <path d="M12 2L9.19 8.63L2 9.24L7.46 13.97L5.82 21L12 17.27L18.18 21L16.54 13.97L22 9.24L14.81 8.63L12 2Z"/>
+                    </svg>
+                    <div>
+                        <p class="text-white text-[14px] font-bold leading-tight">Go Pro</p>
+                        <p class="text-white/70 text-[11px]">Upgrade your plan</p>
+                    </div>
+                </div>
+                <div class="bg-white text-[#2D8CFF] text-[12px] font-semibold px-4 py-1.5 rounded-full">Upgrade</div>
+            </div>
+            <div style="height:1px; background:#2a2a2a; margin:4px 0;"></div>
+            <div class="relative">
+                <div id="profile-btn" class="flex items-center gap-3 px-1 py-2 cursor-pointer hover:bg-[#232323] rounded-lg transition-colors">
+                    ${avatarHTML}
+                    <div class="flex-1 min-w-0">
+                        <p class="text-white text-[14px] font-medium truncate">${userName}</p>
+                        <p class="text-[#666] text-[11px]">Free</p>
+                    </div>
+                </div>
+                <div id="profile-dropdown" style="display:none; position:absolute; bottom:100%; left:0; right:0; margin-bottom:8px; background:#1a1a1a; border:1px solid #2a2a2a; border-radius:16px; padding:8px 0; box-shadow:0 15px 40px rgba(0,0,0,0.5); z-index:100;">
+                    <div class="flex items-center gap-3 px-4 py-3">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                        <span class="text-[#888] text-[14px]">${userEmail}</span>
+                    </div>
+                    <a href="index.html" class="flex items-center gap-3 px-4 py-3 hover:bg-[#232323] transition-colors" style="text-decoration:none;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg><span class="text-white text-[14px]">Settings</span></a>
+                    <a href="#" class="flex items-center gap-3 px-4 py-3 hover:bg-[#232323] transition-colors" style="text-decoration:none;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path></svg><span class="text-white text-[14px]">Upgrade Plan</span></a>
+                    <div style="height:1px; background:#2a2a2a; margin:4px 0;"></div>
+                    <button id="logout-btn" class="w-full flex items-center gap-3 px-4 py-3 hover:bg-[#232323] transition-colors text-left"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg><span class="text-red-500 text-[14px]">Log Out</span></button>
+                </div>
+            </div>
+        `;
+
+        document.getElementById('profile-btn')?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const dd = document.getElementById('profile-dropdown');
+            dd.style.display = dd.style.display === 'none' ? 'block' : 'none';
+        });
+        document.addEventListener('click', (e) => {
+            const dd = document.getElementById('profile-dropdown');
+            if (dd && !dd.contains(e.target)) dd.style.display = 'none';
+        });
+        document.getElementById('logout-btn')?.addEventListener('click', logoutUser);
+    }
+
+    // Auto-login on page load
+    const savedUser = getCurrentUser();
+    if (savedUser) showLoggedInUI(savedUser);
+
+    // Render sidebar chat history
+    renderSidebarChatHistory();
+
+    // ============ Google Sign-In ============
+    const GOOGLE_CLIENT_ID = '1002474250480-t1937sr0esof50t8e0ai9gbipgku672j.apps.googleusercontent.com';
+
+    function handleGoogleCredential(response) {
+        const payload = JSON.parse(atob(response.credential.split('.')[1]));
+        const email = payload.email;
+        const name = payload.name || email.split('@')[0];
+        const picture = payload.picture || null;
+        const users = getUsers();
+        if (!users[email]) {
+            users[email] = { email, name, picture, provider: 'google', createdAt: Date.now() };
+            saveUsers(users);
+        }
+        setCurrentUser({ email, name, picture, provider: 'google' });
+        closeGhostPopup();
+        showLoggedInUI({ email, name, picture, provider: 'google' });
+    }
+
+    let googleInitialized = false;
+    window.addEventListener('load', () => {
+        if (window.google?.accounts?.id) {
+            google.accounts.id.initialize({
+                client_id: GOOGLE_CLIENT_ID,
+                callback: handleGoogleCredential,
+                ux_mode: 'popup',
+                context: 'signin'
+            });
+            googleInitialized = true;
+        }
+    });
+
+    function createGoogleTokenClient() {
+        return google.accounts.oauth2.initTokenClient({
+            client_id: GOOGLE_CLIENT_ID,
+            scope: 'email profile',
+            callback: async (tokenResponse) => {
+                if (tokenResponse.access_token) {
+                    const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+                        headers: { Authorization: 'Bearer ' + tokenResponse.access_token }
+                    });
+                    const payload = await res.json();
+                    const email = payload.email;
+                    const name = payload.name || email.split('@')[0];
+                    const picture = payload.picture || null;
+                    const users = getUsers();
+                    if (!users[email]) {
+                        users[email] = { email, name, picture, provider: 'google', createdAt: Date.now() };
+                        saveUsers(users);
+                    }
+                    setCurrentUser({ email, name, picture, provider: 'google' });
+                    closeGhostPopup();
+                    showLoggedInUI({ email, name, picture, provider: 'google' });
+                }
+            }
+        });
+    }
+
+    document.getElementById('google-login-btn')?.addEventListener('click', () => {
+        if (googleInitialized && window.google?.accounts?.id) {
+            google.accounts.id.prompt((notification) => {
+                if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+                    if (window.google?.accounts?.oauth2) {
+                        createGoogleTokenClient().requestAccessToken();
+                    }
+                }
+            });
+        } else if (window.google?.accounts?.oauth2) {
+            createGoogleTokenClient().requestAccessToken();
+        }
+    });
+
+    // Apple login placeholder
+    document.getElementById('apple-login-btn')?.addEventListener('click', () => {
+        const overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.5);z-index:20000;display:flex;align-items:center;justify-content:center;';
+        overlay.innerHTML = '<div style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:16px;padding:24px;width:400px;box-shadow:0 20px 50px rgba(0,0,0,0.5);"><p style="color:white;font-size:15px;margin-bottom:6px;font-weight:600;">Apple Sign-In</p><p style="color:#888;font-size:13px;margin-bottom:20px;">Apple Sign-In is currently unavailable. Please use Google or Email login instead.</p><div style="display:flex;justify-content:flex-end;"><button class="close-btn" style="background:#2a2a2a;color:white;border:none;border-radius:10px;padding:8px 20px;font-size:13px;cursor:pointer;">OK</button></div></div>';
+        overlay.querySelector('.close-btn').addEventListener('click', () => overlay.remove());
+        overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+        document.body.appendChild(overlay);
+    });
+</script>
+</body>
+</html>

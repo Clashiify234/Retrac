@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="favicon.png" sizes="any">
+    <title>Retrac Speaker - 3D Model</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Inter', sans-serif; background: #111111; color: white; height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
+        .topbar { display: flex; align-items: center; justify-content: space-between; padding: 14px 24px; background: rgba(17,17,17,0.95); backdrop-filter: blur(12px); border-bottom: 1px solid #2a2a2a; z-index: 10; }
+        .topbar-left { display: flex; align-items: center; gap: 16px; }
+        .topbar-left a { color: #666; text-decoration: none; display: flex; align-items: center; gap: 6px; font-size: 14px; transition: color 0.2s; }
+        .topbar-left a:hover { color: white; }
+        .topbar h1 { font-size: 16px; font-weight: 600; color: white; }
+        .topbar-right { display: flex; align-items: center; gap: 10px; }
+        .topbar-btn { background: #1a1a1a; border: 1px solid #2a2a2a; color: #aaa; font-size: 13px; padding: 7px 14px; border-radius: 8px; cursor: pointer; font-family: inherit; transition: all 0.2s; }
+        .topbar-btn:hover { background: #222; color: white; }
+        .topbar-btn.primary { background: white; color: black; border-color: white; }
+        .topbar-btn.primary:hover { background: #ddd; }
+        #canvas-container { flex: 1; position: relative; }
+        canvas { display: block; }
+        .info-panel { position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%); background: rgba(17,17,17,0.92); backdrop-filter: blur(12px); border: 1px solid #2a2a2a; border-radius: 14px; padding: 16px 24px; display: flex; align-items: center; gap: 28px; z-index: 10; }
+        .info-item { text-align: center; }
+        .info-item .label { font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 3px; }
+        .info-item .value { font-size: 13px; font-weight: 600; color: #ddd; }
+        .info-divider { width: 1px; height: 32px; background: #2a2a2a; }
+        .controls-hint { position: absolute; top: 16px; left: 50%; transform: translateX(-50%); color: #aaa; font-size: 12px; pointer-events: none; }
+        .color-options { display: flex; gap: 6px; align-items: center; }
+        .color-dot { width: 20px; height: 20px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; transition: all 0.2s; }
+        .color-dot:hover { transform: scale(1.15); }
+        .color-dot.active { border-color: white; }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/EffectComposer.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/CopyShader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
+</head>
+<body>
+    <div class="topbar">
+        <div class="topbar-left">
+            <a href="voice.html"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg> Back</a>
+            <div style="width:1px;height:20px;background:#ddd;"></div>
+            <h1>Retrac Speaker</h1>
+        </div>
+        <div class="topbar-right">
+            <div class="color-options">
+                <div class="color-dot active" style="background:#f0f0f0; border-color:white;" data-color="light" title="Glacier White"></div>
+                <div class="color-dot" style="background:#1a1a1a;" data-color="dark" title="Charcoal"></div>
+                <div class="color-dot" style="background:#2563eb;" data-color="blue" title="Deep Blue"></div>
+                <div class="color-dot" style="background:#7c3aed;" data-color="purple" title="Purple"></div>
+            </div>
+            <button class="topbar-btn" id="reset-btn">Reset View</button>
+            <button class="topbar-btn" id="wireframe-btn">Wireframe</button>
+            <button class="topbar-btn primary" id="download-btn">Download STL</button>
+        </div>
+    </div>
+    <div id="canvas-container">
+        <p class="controls-hint">Drag to rotate · Scroll to zoom · Right-click to pan</p>
+    </div>
+    <div class="info-panel">
+        <div class="info-item"><div class="label">Height</div><div class="value">142mm</div></div>
+        <div class="info-divider"></div>
+        <div class="info-item"><div class="label">Diameter</div><div class="value">124mm</div></div>
+        <div class="info-divider"></div>
+        <div class="info-item"><div class="label">Material</div><div class="value">PLA / ABS</div></div>
+        <div class="info-divider"></div>
+        <div class="info-item"><div class="label">Fits</div><div class="value">Raspberry Pi 4</div></div>
+        <div class="info-divider"></div>
+        <div class="info-item"><div class="label">LED Ring</div><div class="value">Top + Bottom</div></div>
+        <div class="info-divider"></div>
+        <div class="info-item"><div class="label">Buttons</div><div class="value">Play, Vol+, Vol-</div></div>
+    </div>
+<script>
+// ===========================================================================
+//  RETRAC SPEAKER — PHOTOREALISTIC 3D MODEL
+// ===========================================================================
+
+let scene, camera, renderer, composer, controls;
+const speakerGroup = new THREE.Group();
+
+const COLORS = {
+    body: 0xf5f5f5,
+    meshHoles: 0x999999,
+    glow: 0xffffff,
+    base: 0xeeeeee,
+    button: 0xf0f0f0,
+    icon: 0x888888,
+    portDark: 0x222222,
+    portMetal: 0xaaaaaa,
+    rubber: 0xdddddd
+};
+
+init();
+animate();
+
+function init() {
+    const container = document.getElementById('canvas-container');
+
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x111111);
+    // no fog
+
+    camera = new THREE.PerspectiveCamera(35, container.clientWidth / container.clientHeight, 0.1, 1000);
+    camera.position.set(0, 10, 25);
+
+    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+    renderer.setSize(container.clientWidth, container.clientHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = false;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.0;
+    container.appendChild(renderer.domElement);
+
+    controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.target.set(0, 4, 0);
+    controls.maxDistance = 40;
+    controls.minDistance = 10;
+    controls.maxPolarAngle = Math.PI / 2 + 0.2;
+
+    setupLighting();
+    buildSmartSpeaker();
+    setupPostProcessing();
+
+    window.addEventListener('resize', onWindowResize, false);
+    scene.add(speakerGroup);
+}
+
+// ==========================================
+// Studio Lighting
+// ==========================================
+function setupLighting() {
+    const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.6);
+    hemiLight.position.set(0, 20, 0);
+    scene.add(hemiLight);
+
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    dirLight.position.set(10, 15, 10);
+    dirLight.castShadow = false;
+    scene.add(dirLight);
+
+    const fillLight = new THREE.DirectionalLight(0xddddff, 0.4);
+    fillLight.position.set(-10, 10, -10);
+    scene.add(fillLight);
+
+    const rimLight = new THREE.PointLight(0xffffff, 0.3);
+    rimLight.position.set(0, -5, -15);
+    scene.add(rimLight);
+}
+
+// ==========================================
+// Procedural Mesh Texture
+// ==========================================
+function createProceduralMeshTexture() {
+    const size = 2048;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+
+    // Wire color (light grey base between holes)
+    ctx.fillStyle = '#d0d0d0';
+    ctx.fillRect(0, 0, size, size);
+
+    // Dark round holes in tight grid
+    const spacing = 32;
+    const holeR = 12;
+    ctx.fillStyle = '#8a8a8a';
+
+    for (let row = 0; row < size / spacing + 2; row++) {
+        for (let col = 0; col < size / spacing + 2; col++) {
+            const ox = (row % 2) * (spacing * 0.5);
+            const px = col * spacing + ox;
+            const py = row * spacing;
+            ctx.beginPath();
+            ctx.arc(px, py, holeR, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(4, 1.5);
+    texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    return texture;
+}
+
+function createCapsule(radius, height, material) {
+    const group = new THREE.Group();
+    const cylinderGeo = new THREE.CylinderGeometry(radius, radius, height, 16);
+    const sphereGeo = new THREE.SphereGeometry(radius, 16, 16);
+    const cylinder = new THREE.Mesh(cylinderGeo, material);
+    const topSphere = new THREE.Mesh(sphereGeo, material);
+    const bottomSphere = new THREE.Mesh(sphereGeo, material);
+    topSphere.position.y = height / 2;
+    bottomSphere.position.y = -height / 2;
+    group.add(cylinder);
+    group.add(topSphere);
+    group.add(bottomSphere);
+    return group;
+}
+
+// ==========================================
+// Build the Speaker
+// ==========================================
+function buildSmartSpeaker() {
+    const speakerRadius = 5.0;
+    const speakerHeight = 10.3;
+    const cornerRadius = 1.2;
+    const baseRadius = 5.4;
+    const baseHeight = 0.5;
+
+    // --- Body ---
+    const points = [];
+    const segments = 20;
+
+    // Straight bottom edge (no rounding)
+    points.push(new THREE.Vector2(speakerRadius, 0));
+
+    // Top rounded corner
+    for (let i = 0; i <= segments; i++) {
+        const theta = (Math.PI / 2) + (i / segments) * (Math.PI / 2);
+        const x = (speakerRadius - cornerRadius) + Math.cos(theta - Math.PI / 2) * cornerRadius;
+        const y = (speakerHeight - cornerRadius) + Math.sin(theta - Math.PI / 2) * cornerRadius;
+        points.push(new THREE.Vector2(x, y));
+    }
+
+    const bodyGeometry = new THREE.LatheGeometry(points, 512);
+
+    // Fix UVs: remap V to world-space Y so texture is uniform everywhere
+    const uvAttr = bodyGeometry.attributes.uv;
+    const posAttr = bodyGeometry.attributes.position;
+    const speakerHeightInv = 1.0 / speakerHeight;
+    for (let i = 0; i < uvAttr.count; i++) {
+        const y = posAttr.getY(i);
+        uvAttr.setY(i, y * speakerHeightInv);
+    }
+    uvAttr.needsUpdate = true;
+
+    const meshBumpMap = createProceduralMeshTexture();
+    const bodyMaterial = new THREE.MeshStandardMaterial({
+        color: COLORS.body,
+        roughness: 0.9,
+        metalness: 0.0,
+        map: meshBumpMap,
+        bumpScale: 0
+    });
+
+    // --- Base pedestal — same radius as body, clean transition ---
+    const baseBottomRadius = speakerRadius;
+    const totalBaseH = 1.2;
+    const baseCorner = 0.3;
+    const baseProfilePts = [];
+    // Center bottom
+    baseProfilePts.push(new THREE.Vector2(0.001, 0));
+    // Flat bottom
+    baseProfilePts.push(new THREE.Vector2(baseBottomRadius - baseCorner, 0));
+    // Rounded bottom-outer corner
+    for (let i = 0; i <= 16; i++) {
+        const a = (Math.PI / 2) * (i / 16);
+        baseProfilePts.push(new THREE.Vector2(
+            baseBottomRadius - baseCorner + Math.sin(a) * baseCorner,
+            baseCorner - Math.cos(a) * baseCorner
+        ));
+    }
+    // Straight side up to meet body
+    baseProfilePts.push(new THREE.Vector2(baseBottomRadius, totalBaseH));
+    // Top inward to center
+    baseProfilePts.push(new THREE.Vector2(0.001, totalBaseH));
+
+    const baseGeo = new THREE.LatheGeometry(baseProfilePts, 512);
+    const baseMat = new THREE.MeshStandardMaterial({
+        color: COLORS.base,
+        roughness: 0.5,
+        metalness: 0.1
+    });
+    const baseMesh = new THREE.Mesh(baseGeo, baseMat);
+    baseMesh.position.y = -0.05;
+    baseMesh.castShadow = true;
+    baseMesh.receiveShadow = true;
+    speakerGroup.add(baseMesh);
+
+    const baseTopY = baseMesh.position.y + totalBaseH;
+
+    // --- Body sits flush on top of base ---
+    const bodyYOffset = baseTopY;
+    const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+    body.position.y = bodyYOffset;
+    body.castShadow = true;
+    body.receiveShadow = true;
+    speakerGroup.add(body);
+
+    // --- Top concave dish ---
+    const topDipPoints = [];
+    const dipRadius = speakerRadius - cornerRadius + 0.1;
+    const centerDipDepth = 0.8;
+    for (let i = segments; i >= 0; i--) {
+        const p = i / segments;
+        const x = p * dipRadius;
+        const y = speakerHeight - (Math.cos(p * Math.PI) * 0.5 + 0.5) * centerDipDepth;
+        topDipPoints.push(new THREE.Vector2(x, y));
+    }
+    const topDipGeometry = new THREE.LatheGeometry(topDipPoints, 64);
+    const topDipMaterial = new THREE.MeshStandardMaterial({ color: 0xfafafa, roughness: 0.4, metalness: 0.1 });
+    const topDip = new THREE.Mesh(topDipGeometry, topDipMaterial);
+    topDip.position.y = bodyYOffset;
+    topDip.receiveShadow = true;
+    speakerGroup.add(topDip);
+
+    // --- Top LED Ring ---
+    const topRingGeo = new THREE.TorusGeometry(speakerRadius - cornerRadius + 0.05, 0.15, 16, 128);
+    const topEmissiveMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 3.0, roughness: 0.2 });
+    const topRing = new THREE.Mesh(topRingGeo, topEmissiveMat);
+    topRing.position.y = bodyYOffset + speakerHeight + 0.02;
+    topRing.rotation.x = Math.PI / 2;
+    speakerGroup.add(topRing);
+
+    const topLight = new THREE.PointLight(0xffffff, 0.3, 5);
+    topLight.position.y = bodyYOffset + speakerHeight + 0.5;
+    speakerGroup.add(topLight);
+
+    // --- Rubber feet (flat cylindrical pads, flush against base bottom) ---
+    const feetMat = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.95, metalness: 0.0 });
+    const footHeight = 0.35;
+    const footRadius = 0.6;
+    const baseBottomY = baseMesh.position.y;
+    for (let i = 0; i < 4; i++) {
+        const angle = (i * Math.PI / 2) + (Math.PI / 4);
+        const fRadius = baseBottomRadius - 0.8;
+        // Cylinder foot
+        const footGeo = new THREE.CylinderGeometry(footRadius, footRadius * 0.95, footHeight, 32);
+        const footMesh = new THREE.Mesh(footGeo, feetMat);
+        footMesh.position.x = Math.cos(angle) * fRadius;
+        footMesh.position.z = Math.sin(angle) * fRadius;
+        footMesh.position.y = baseBottomY - footHeight / 2;
+        footMesh.castShadow = true;
+        speakerGroup.add(footMesh);
+        // Rubber grip pad on bottom
+        const padGeo = new THREE.CylinderGeometry(footRadius * 0.85, footRadius * 0.85, 0.06, 32);
+        const padMat = new THREE.MeshStandardMaterial({ color: 0x444444, roughness: 1.0 });
+        const pad = new THREE.Mesh(padGeo, padMat);
+        pad.position.x = footMesh.position.x;
+        pad.position.z = footMesh.position.z;
+        pad.position.y = baseBottomY - footHeight - 0.03;
+        speakerGroup.add(pad);
+    }
+
+    createFrontButtons(speakerRadius, speakerHeight, bodyYOffset);
+    speakerGroup.position.y = Math.abs(baseMesh.position.y - baseHeight / 2);
+
+    // Floor
+    const floorGeo = new THREE.PlaneGeometry(100, 100);
+    const floorMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.4, metalness: 0.1 });
+    const floor = new THREE.Mesh(floorGeo, floorMat);
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.y = 0;
+    floor.receiveShadow = true;
+    scene.add(floor);
+}
+
+// ==========================================
+// Front Buttons with Icons
+// ==========================================
+function createFrontButtons(radius, height, yOffset) {
+    yOffset = yOffset || 0;
+    const btnR = 0.55;
+    const centerY = yOffset + height / 2;
+    const spacing = 2.2;
+    const buttonDefs = [
+        { y: centerY + spacing, type: 'playpause' },
+        { y: centerY, type: 'plus' },
+        { y: centerY - spacing, type: 'minus' }
+    ];
+
+    buttonDefs.forEach(btn => {
+        const iconTex = createIconTexture(btn.type);
+
+        // Outer ring border
+        const ringGeo = new THREE.TorusGeometry(btnR, 0.04, 12, 64);
+        const ringMat = new THREE.MeshStandardMaterial({ color: 0xd0d0d0, roughness: 0.4, metalness: 0.05 });
+        const ring = new THREE.Mesh(ringGeo, ringMat);
+        ring.position.set(0, btn.y, radius + 0.02);
+        ring.lookAt(0, btn.y, radius + 10);
+        speakerGroup.add(ring);
+
+        // Button face (slightly raised dome)
+        const faceGeo = new THREE.CircleGeometry(btnR - 0.05, 48);
+        const faceMat = new THREE.MeshStandardMaterial({
+            color: 0xeeeeee,
+            roughness: 0.45,
+            metalness: 0.02,
+            map: iconTex
+        });
+        const face = new THREE.Mesh(faceGeo, faceMat);
+        face.position.set(0, btn.y, radius + 0.04);
+        face.lookAt(0, btn.y, radius + 10);
+        face.castShadow = true;
+        speakerGroup.add(face);
+    });
+}
+
+function createIconTexture(type) {
+    const size = 512;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+
+    // Transparent/matching background
+    ctx.fillStyle = '#eeeeee';
+    ctx.fillRect(0, 0, size, size);
+
+    ctx.translate(size / 2, size / 2);
+    ctx.strokeStyle = '#111111';
+    ctx.fillStyle = '#111111';
+    ctx.lineWidth = 12;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    if (type === 'playpause') {
+        // Play triangle (outlined)
+        ctx.beginPath();
+        ctx.moveTo(-40, -50);
+        ctx.lineTo(20, 0);
+        ctx.lineTo(-40, 50);
+        ctx.closePath();
+        ctx.stroke();
+        ctx.fill();
+
+        // Pause bars
+        ctx.fillRect(50, -40, 14, 80);
+        ctx.fillRect(78, -40, 14, 80);
+    } else if (type === 'plus') {
+        // Thin cross
+        ctx.beginPath();
+        ctx.moveTo(0, -55);
+        ctx.lineTo(0, 55);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(-55, 0);
+        ctx.lineTo(55, 0);
+        ctx.stroke();
+    } else if (type === 'minus') {
+        // Thin horizontal line
+        ctx.beginPath();
+        ctx.moveTo(-55, 0);
+        ctx.lineTo(55, 0);
+        ctx.stroke();
+    }
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.center.set(0.5, 0.5);
+    return texture;
+}
+
+
+// ==========================================
+// Post-Processing (Bloom for LED glow)
+// ==========================================
+function setupPostProcessing() {
+    const renderScene = new THREE.RenderPass(scene, camera);
+    const bloomPass = new THREE.UnrealBloomPass(
+        new THREE.Vector2(window.innerWidth, window.innerHeight),
+        0.15, 0.2, 0.95
+    );
+    composer = new THREE.EffectComposer(renderer);
+    composer.addPass(renderScene);
+    composer.addPass(bloomPass);
+}
+
+// ==========================================
+// Resize & Animate
+// ==========================================
+function onWindowResize() {
+    const w = document.getElementById('canvas-container').clientWidth;
+    const h = document.getElementById('canvas-container').clientHeight;
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    renderer.setSize(w, h);
+    composer.setSize(w, h);
+}
+
+function animate() {
+    requestAnimationFrame(animate);
+    controls.update();
+    composer.render();
+}
+
+// ==========================================
+// UI Controls
+// ==========================================
+
+// Reset View
+document.getElementById('reset-btn').addEventListener('click', () => {
+    camera.position.set(0, 10, 25);
+    controls.target.set(0, 4, 0);
+});
+
+// Wireframe Toggle
+let wireframe = false;
+document.getElementById('wireframe-btn').addEventListener('click', () => {
+    wireframe = !wireframe;
+    speakerGroup.traverse(child => {
+        if (child.isMesh && child.material) {
+            if (Array.isArray(child.material)) {
+                child.material.forEach(m => m.wireframe = wireframe);
+            } else {
+                child.material.wireframe = wireframe;
+            }
+        }
+    });
+    document.getElementById('wireframe-btn').textContent = wireframe ? 'Solid' : 'Wireframe';
+});
+
+// Color Switching
+const colorPresets = {
+    light: { body: 0xf5f5f5, base: 0xeeeeee, button: 0xf0f0f0, bg: 0x111111 },
+    dark: { body: 0x1e1e1e, base: 0x161616, button: 0x252525, bg: 0x111111 },
+    blue: { body: 0x1e3a6a, base: 0x182850, button: 0x243868, bg: 0x0a1628 },
+    purple: { body: 0x35204a, base: 0x2d1a40, button: 0x3d2855, bg: 0x150d1e }
+};
+
+document.querySelectorAll('.color-dot').forEach(dot => {
+    dot.addEventListener('click', () => {
+        document.querySelectorAll('.color-dot').forEach(d => { d.classList.remove('active'); d.style.borderColor = 'transparent'; });
+        dot.classList.add('active');
+        dot.style.borderColor = '#111';
+        const preset = colorPresets[dot.dataset.color];
+        if (!preset) return;
+
+        scene.background.setHex(preset.bg);
+        scene.fog.color.setHex(preset.bg);
+
+        speakerGroup.traverse(child => {
+            if (!child.isMesh) return;
+            const mats = Array.isArray(child.material) ? child.material : [child.material];
+            mats.forEach(m => {
+                if (m.emissive && m.emissiveIntensity > 0.5) return; // Skip LED materials
+                if (m.color.getHex() === COLORS.body || m.color.getHex() === colorPresets.light.body ||
+                    m.color.getHex() === colorPresets.dark.body || m.color.getHex() === colorPresets.blue.body ||
+                    m.color.getHex() === colorPresets.purple.body) {
+                    m.color.setHex(preset.body);
+                }
+            });
+        });
+    });
+});
+
+// STL Download
+document.getElementById('download-btn').addEventListener('click', () => {
+    let output = 'solid retrac_speaker\n';
+    speakerGroup.updateMatrixWorld(true);
+    speakerGroup.traverse(child => {
+        if (!child.isMesh) return;
+        const geo = child.geometry;
+        const positions = geo.attributes.position;
+        const index = geo.index;
+        const worldMatrix = child.matrixWorld;
+        const vA = new THREE.Vector3(), vB = new THREE.Vector3(), vC = new THREE.Vector3();
+        const cb = new THREE.Vector3(), ab = new THREE.Vector3();
+        const triCount = index ? index.count / 3 : positions.count / 3;
+        for (let i = 0; i < triCount; i++) {
+            const i3 = i * 3;
+            const a = index ? index.getX(i3) : i3;
+            const b = index ? index.getX(i3 + 1) : i3 + 1;
+            const c = index ? index.getX(i3 + 2) : i3 + 2;
+            vA.fromBufferAttribute(positions, a).applyMatrix4(worldMatrix);
+            vB.fromBufferAttribute(positions, b).applyMatrix4(worldMatrix);
+            vC.fromBufferAttribute(positions, c).applyMatrix4(worldMatrix);
+            cb.subVectors(vC, vB); ab.subVectors(vA, vB);
+            const normal = new THREE.Vector3().crossVectors(cb, ab).normalize();
+            output += `  facet normal ${normal.x.toFixed(6)} ${normal.y.toFixed(6)} ${normal.z.toFixed(6)}\n`;
+            output += '    outer loop\n';
+            output += `      vertex ${vA.x.toFixed(6)} ${vA.y.toFixed(6)} ${vA.z.toFixed(6)}\n`;
+            output += `      vertex ${vB.x.toFixed(6)} ${vB.y.toFixed(6)} ${vB.z.toFixed(6)}\n`;
+            output += `      vertex ${vC.x.toFixed(6)} ${vC.y.toFixed(6)} ${vC.z.toFixed(6)}\n`;
+            output += '    endloop\n  endfacet\n';
+        }
+    });
+    output += 'endsolid retrac_speaker';
+    const blob = new Blob([output], { type: 'application/sla' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url; link.download = 'retrac-speaker.stl'; link.click();
+    URL.revokeObjectURL(url);
+});
+</script>
+</body>
+</html>

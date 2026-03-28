@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RetracLocal Dashboard</title>
+    <link rel="icon" href="/logo.png">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg: #050508; --surface: #0c0c10; --surface2: #111118;
+            --border: #1a1a24; --border-hover: #2a2a3a;
+            --text: #e0e0e8; --text-dim: #6a6a7a; --text-muted: #3a3a4a;
+            --accent: #3b82f6; --green: #00ff88; --red: #ff3366;
+            --yellow: #ffcc00; --purple: #a855f7; --cyan: #00e5ff;
+        }
+        body {
+            background: var(--bg); color: var(--text);
+            font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+            min-height: 100vh; overflow-x: hidden;
+        }
+
+        /* Scanline overlay */
+        body::after {
+            content: ''; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
+            pointer-events: none; z-index: 9999;
+        }
+
+        /* Header */
+        .header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 16px 28px; border-bottom: 1px solid var(--border);
+            background: linear-gradient(180deg, #0a0a10 0%, var(--bg) 100%);
+        }
+        .header-left { display: flex; align-items: center; gap: 12px; }
+        .header h1 { font-size: 15px; font-weight: 600; letter-spacing: 1px; }
+        .header h1 span { color: var(--green); }
+        .header-right { display: flex; align-items: center; gap: 16px; }
+        .status-badge {
+            display: flex; align-items: center; gap: 8px;
+            padding: 5px 14px; border-radius: 4px; font-size: 11px; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 1px;
+            background: rgba(0, 255, 136, 0.06); color: var(--green); border: 1px solid rgba(0, 255, 136, 0.15);
+        }
+        .status-badge.offline { background: rgba(255, 51, 102, 0.06); color: var(--red); border-color: rgba(255, 51, 102, 0.15); }
+        .status-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; box-shadow: 0 0 8px currentColor; animation: blink 1.5s infinite; }
+        @keyframes blink { 0%,100%{opacity:1}50%{opacity:0.3} }
+        .clock { font-size: 11px; color: var(--text-dim); font-variant-numeric: tabular-nums; letter-spacing: 1px; }
+
+        /* Main */
+        .main { padding: 20px 28px; max-width: 1500px; margin: 0 auto; }
+
+        /* Live Activity Bar (EKG style) */
+        .live-bar {
+            background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+            padding: 12px 16px; margin-bottom: 20px; position: relative; overflow: hidden;
+        }
+        .live-bar canvas { width: 100%; height: 50px; display: block; }
+        .live-bar-label {
+            position: absolute; top: 8px; left: 16px; font-size: 10px; color: var(--text-dim);
+            text-transform: uppercase; letter-spacing: 1.5px;
+        }
+        .live-bar-value {
+            position: absolute; top: 6px; right: 16px; font-size: 18px; font-weight: 700;
+            color: var(--green); text-shadow: 0 0 12px rgba(0,255,136,0.4);
+        }
+
+        /* Stat Cards */
+        .stats-grid {
+            display: grid; grid-template-columns: repeat(5, 1fr);
+            gap: 12px; margin-bottom: 20px;
+        }
+        @media (max-width: 1100px) { .stats-grid { grid-template-columns: repeat(3, 1fr); } }
+        @media (max-width: 700px) { .stats-grid { grid-template-columns: repeat(2, 1fr); } }
+        .stat-card {
+            background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+            padding: 16px 18px; position: relative; overflow: hidden; transition: border-color 0.3s;
+        }
+        .stat-card:hover { border-color: var(--border-hover); }
+        .stat-card::before {
+            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+            background: var(--accent); opacity: 0.5;
+        }
+        .stat-card:nth-child(1)::before { background: var(--green); }
+        .stat-card:nth-child(2)::before { background: var(--accent); }
+        .stat-card:nth-child(3)::before { background: var(--purple); }
+        .stat-card:nth-child(4)::before { background: var(--cyan); }
+        .stat-card:nth-child(5)::before { background: var(--yellow); }
+        .stat-label { font-size: 9px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 8px; }
+        .stat-value { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
+        .stat-sub { font-size: 10px; color: var(--text-muted); margin-top: 4px; letter-spacing: 0.3px; }
+        .v-green { color: var(--green); text-shadow: 0 0 10px rgba(0,255,136,0.3); }
+        .v-blue { color: var(--accent); text-shadow: 0 0 10px rgba(59,130,246,0.3); }
+        .v-purple { color: var(--purple); text-shadow: 0 0 10px rgba(168,85,247,0.3); }
+        .v-cyan { color: var(--cyan); text-shadow: 0 0 10px rgba(0,229,255,0.3); }
+        .v-yellow { color: var(--yellow); text-shadow: 0 0 10px rgba(255,204,0,0.3); }
+
+        /* Charts Row */
+        .charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
+        @media (max-width: 900px) { .charts-row { grid-template-columns: 1fr; } }
+        .chart-panel {
+            background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+            padding: 16px; position: relative;
+        }
+        .chart-panel canvas { width: 100%; display: block; }
+        .chart-title { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 12px; }
+
+        /* Content Grid */
+        .content-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        @media (max-width: 900px) { .content-grid { grid-template-columns: 1fr; } }
+
+        /* Panel */
+        .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+        .panel-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 14px 16px; border-bottom: 1px solid var(--border);
+        }
+        .panel-title { font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-dim); }
+        .panel-body { padding: 12px 16px; }
+
+        /* Model Cards */
+        .model-list { display: flex; flex-direction: column; gap: 8px; }
+        .model-card {
+            display: flex; align-items: center; gap: 12px;
+            padding: 12px; border-radius: 6px; background: var(--surface2);
+            border: 1px solid var(--border); transition: all 0.2s;
+        }
+        .model-card:hover { border-color: var(--border-hover); }
+        .model-icon {
+            width: 36px; height: 36px; border-radius: 8px;
+            display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+        }
+        .model-info { flex: 1; min-width: 0; }
+        .model-name { font-size: 12px; font-weight: 600; }
+        .model-id { font-size: 10px; color: var(--text-dim); margin-top: 2px; }
+        .model-status { flex-shrink: 0; }
+        .badge-installed {
+            font-size: 9px; padding: 3px 10px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.5px;
+            background: rgba(0,255,136,0.08); color: var(--green); border: 1px solid rgba(0,255,136,0.15);
+        }
+        .badge-pull {
+            font-size: 9px; padding: 3px 10px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.5px; cursor: pointer;
+            background: rgba(255,255,255,0.03); color: var(--text-dim); border: 1px solid var(--border); transition: all 0.2s;
+        }
+        .badge-pull:hover { background: rgba(0,229,255,0.08); color: var(--cyan); border-color: rgba(0,229,255,0.3); }
+        .badge-pulling {
+            font-size: 9px; padding: 3px 10px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.5px;
+            background: rgba(255,204,0,0.08); color: var(--yellow); border: 1px solid rgba(255,204,0,0.15);
+        }
+
+        /* Log */
+        .log-list { display: flex; flex-direction: column; gap: 4px; max-height: 380px; overflow-y: auto; }
+        .log-list::-webkit-scrollbar { width: 3px; }
+        .log-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+        .log-entry {
+            display: flex; align-items: center; gap: 10px;
+            padding: 8px 10px; border-radius: 4px; background: var(--surface2);
+            font-size: 11px; border-left: 2px solid transparent;
+        }
+        .log-entry.err { border-left-color: var(--red); }
+        .log-time { color: var(--text-muted); min-width: 44px; font-variant-numeric: tabular-nums; }
+        .log-model { font-weight: 600; min-width: 90px; display: flex; align-items: center; gap: 5px; }
+        .log-tokens { color: var(--text-dim); font-size: 10px; }
+        .log-dur { color: var(--cyan); margin-left: auto; font-variant-numeric: tabular-nums; font-size: 10px; }
+        .log-err { color: var(--red); font-size: 10px; }
+
+        .empty { text-align: center; padding: 32px; color: var(--text-muted); font-size: 11px; letter-spacing: 0.5px; }
+
+        /* Full width */
+        .full-width { grid-column: 1 / -1; }
+
+        /* System bar */
+        .sys-bar {
+            display: flex; gap: 24px; padding: 10px 16px; font-size: 10px; color: var(--text-muted);
+            border-top: 1px solid var(--border); margin-top: 20px; letter-spacing: 0.5px;
+        }
+        .sys-bar span { display: flex; align-items: center; gap: 5px; }
+
+        /* Donut chart container */
+        .donut-wrap { display: flex; align-items: center; justify-content: center; gap: 24px; }
+        .donut-legend { display: flex; flex-direction: column; gap: 6px; }
+        .donut-legend-item { display: flex; align-items: center; gap: 8px; font-size: 11px; }
+        .donut-dot { width: 8px; height: 8px; border-radius: 2px; }
+
+        /* System Monitor */
+        .hw-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+        .hw-card {
+            background: var(--surface2); border: 1px solid var(--border); border-radius: 6px;
+            padding: 14px; position: relative; overflow: hidden;
+        }
+        .hw-card-glow {
+            position: absolute; top: 0; left: 0; right: 0; height: 1px;
+        }
+        .hw-label { font-size: 9px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+        .hw-value { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+        .hw-sub { font-size: 10px; color: var(--text-muted); margin-top: 4px; }
+        .hw-bar-bg { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; margin-top: 10px; }
+        .hw-bar { height: 100%; border-radius: 3px; transition: width 0.8s ease; position: relative; }
+        .hw-bar::after {
+            content: ''; position: absolute; top: 0; right: 0; width: 20px; height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3));
+        }
+        .hw-mini-chart { margin-top: 8px; }
+        .hw-mini-chart canvas { width: 100%; height: 32px; display: block; }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <div class="header-left">
+        <img src="/logo.png" width="28" height="28" style="border-radius:6px" alt="R">
+        <h1>RETRAC<span>LOCAL</span></h1>
+    </div>
+    <div class="header-right">
+        <div class="clock" id="clock">--:--:--</div>
+        <div id="status-badge" class="status-badge">
+            <div class="status-dot"></div>
+            <span id="status-text">INIT</span>
+        </div>
+    </div>
+</div>
+
+<div class="main">
+    <!-- Live Activity EKG -->
+    <div class="live-bar">
+        <div class="live-bar-label">Live Activity</div>
+        <div class="live-bar-value" id="live-rps">0 <span style="font-size:10px;font-weight:400;color:var(--text-dim)">req/min</span></div>
+        <canvas id="ekg-canvas" height="50"></canvas>
+    </div>
+
+    <!-- Stat Cards -->
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-label">Uptime</div>
+            <div class="stat-value v-green" id="s-uptime">--</div>
+            <div class="stat-sub" id="s-since">--</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Requests</div>
+            <div class="stat-value v-blue" id="s-reqs">0</div>
+            <div class="stat-sub"><span id="s-active">0</span> active</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Tokens</div>
+            <div class="stat-value v-purple" id="s-tokens">0</div>
+            <div class="stat-sub"><span id="s-tin">0</span> in / <span id="s-tout">0</span> out</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Avg Latency</div>
+            <div class="stat-value v-cyan" id="s-lat">--</div>
+            <div class="stat-sub" id="s-errs">0 errors</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Models</div>
+            <div class="stat-value v-yellow" id="s-models">0</div>
+            <div class="stat-sub" id="s-mtotal">of 0</div>
+        </div>
+    </div>
+
+    <!-- Charts -->
+    <div class="charts-row">
+        <div class="chart-panel">
+            <div class="chart-title">Throughput Timeline</div>
+            <canvas id="throughput-canvas" height="140"></canvas>
+        </div>
+        <div class="chart-panel">
+            <div class="chart-title">Token Flow</div>
+            <canvas id="token-canvas" height="140"></canvas>
+        </div>
+    </div>
+
+    <!-- System Monitor -->
+    <div class="chart-panel" style="margin-bottom:20px;">
+        <div class="chart-title" style="display:flex;align-items:center;gap:8px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--cyan)" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+            System Resources
+            <span id="hw-hostname" style="margin-left:auto;color:var(--text-muted);font-size:9px;text-transform:none;letter-spacing:0"></span>
+        </div>
+        <div class="hw-grid" id="hw-grid">
+            <!-- CPU -->
+            <div class="hw-card">
+                <div class="hw-card-glow" style="background:linear-gradient(90deg,transparent,var(--cyan),transparent)"></div>
+                <div class="hw-label">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--cyan)" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M1 9h3M1 15h3M20 9h3M20 15h3"/></svg>
+                    CPU
+                </div>
+                <div class="hw-value v-cyan" id="hw-cpu-pct">--%</div>
+                <div class="hw-sub" id="hw-cpu-info">--</div>
+                <div class="hw-bar-bg"><div class="hw-bar" id="hw-cpu-bar" style="width:0%;background:var(--cyan);box-shadow:0 0 8px rgba(0,229,255,0.4)"></div></div>
+                <div class="hw-mini-chart"><canvas id="hw-cpu-chart" height="32"></canvas></div>
+            </div>
+            <!-- RAM -->
+            <div class="hw-card">
+                <div class="hw-card-glow" style="background:linear-gradient(90deg,transparent,var(--purple),transparent)"></div>
+                <div class="hw-label">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--purple)" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 6V4M10 6V4M14 6V4M18 6V4"/></svg>
+                    RAM
+                </div>
+                <div class="hw-value v-purple" id="hw-ram-pct">--%</div>
+                <div class="hw-sub" id="hw-ram-info">--</div>
+                <div class="hw-bar-bg"><div class="hw-bar" id="hw-ram-bar" style="width:0%;background:var(--purple);box-shadow:0 0 8px rgba(168,85,247,0.4)"></div></div>
+                <div class="hw-mini-chart"><canvas id="hw-ram-chart" height="32"></canvas></div>
+            </div>
+            <!-- GPU -->
+            <div class="hw-card">
+                <div class="hw-card-glow" style="background:linear-gradient(90deg,transparent,var(--green),transparent)"></div>
+                <div class="hw-label">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2"><rect x="2" y="7" width="20" height="10" rx="2"/><circle cx="7" cy="12" r="1.5"/><path d="M14 10v4M17 9v6"/></svg>
+                    GPU
+                </div>
+                <div class="hw-value v-green" id="hw-gpu-pct">--</div>
+                <div class="hw-sub" id="hw-gpu-info">--</div>
+                <div class="hw-bar-bg"><div class="hw-bar" id="hw-gpu-bar" style="width:0%;background:var(--green);box-shadow:0 0 8px rgba(0,255,136,0.4)"></div></div>
+                <div class="hw-mini-chart"><canvas id="hw-gpu-chart" height="32"></canvas></div>
+            </div>
+            <!-- GPU VRAM -->
+            <div class="hw-card">
+                <div class="hw-card-glow" style="background:linear-gradient(90deg,transparent,var(--yellow),transparent)"></div>
+                <div class="hw-label">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--yellow)" stroke-width="2"><path d="M12 2v6l3-3M12 8l-3-3"/><rect x="3" y="10" width="18" height="10" rx="2"/></svg>
+                    VRAM
+                </div>
+                <div class="hw-value v-yellow" id="hw-vram-pct">--</div>
+                <div class="hw-sub" id="hw-vram-info">--</div>
+                <div class="hw-bar-bg"><div class="hw-bar" id="hw-vram-bar" style="width:0%;background:var(--yellow);box-shadow:0 0 8px rgba(255,204,0,0.4)"></div></div>
+                <div class="hw-mini-chart"><canvas id="hw-vram-chart" height="32"></canvas></div>
+            </div>
+            <!-- GPU Temp -->
+            <div class="hw-card">
+                <div class="hw-card-glow" style="background:linear-gradient(90deg,transparent,var(--red),transparent)"></div>
+                <div class="hw-label">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ff3366" stroke-width="2"><path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/></svg>
+                    GPU Temp
+                </div>
+                <div class="hw-value" id="hw-gpu-temp" style="color:var(--green)">--</div>
+                <div class="hw-sub" id="hw-gpu-power">--</div>
+                <div class="hw-bar-bg"><div class="hw-bar" id="hw-temp-bar" style="width:0%;background:var(--green)"></div></div>
+                <div class="hw-mini-chart"><canvas id="hw-temp-chart" height="32"></canvas></div>
+            </div>
+            <!-- Process Memory -->
+            <div class="hw-card">
+                <div class="hw-card-glow" style="background:linear-gradient(90deg,transparent,var(--accent),transparent)"></div>
+                <div class="hw-label">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                    RetracLocal Process
+                </div>
+                <div class="hw-value v-blue" id="hw-proc-mem">--</div>
+                <div class="hw-sub" id="hw-proc-info">--</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Content Grid -->
+    <div class="content-grid">
+        <!-- Models -->
+        <div class="panel">
+            <div class="panel-header">
+                <div class="panel-title">Models</div>
+                <div style="font-size:10px;color:var(--text-muted)" id="ollama-url">--</div>
+            </div>
+            <div class="panel-body">
+                <div class="model-list" id="model-list"><div class="empty">LOADING...</div></div>
+            </div>
+        </div>
+
+        <!-- Log -->
+        <div class="panel">
+            <div class="panel-header">
+                <div class="panel-title">Request Log</div>
+                <div style="font-size:10px;color:var(--text-muted)" id="log-count">0</div>
+            </div>
+            <div class="panel-body">
+                <div class="log-list" id="log-list"><div class="empty">AWAITING REQUESTS...</div></div>
+            </div>
+        </div>
+
+        <!-- Donut chart -->
+        <div class="panel full-width">
+            <div class="panel-header">
+                <div class="panel-title">Model Distribution</div>
+            </div>
+            <div class="panel-body">
+                <div class="donut-wrap" id="donut-wrap">
+                    <canvas id="donut-canvas" width="180" height="180"></canvas>
+                    <div class="donut-legend" id="donut-legend"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="sys-bar">
+        <span>RetracLocal v1.0</span>
+        <span id="sys-ollama">Ollama: --</span>
+        <span>Refresh: 2s</span>
+        <span id="sys-mem">System Monitor: active</span>
+    </div>
+</div>
+
+<script>
+const BASE = window.location.origin;
+const modelColors = {
+    'Qwen 3 14B':'#6366f1','Mistral 7B':'#f97316','Phi-3 14B':'#3b82f6',
+    'GLM-4 9B':'#06b6d4','DeepSeek V3 16B':'#00ff88','Llama 3.2':'#ec4899','Smart Ensemble':'#a855f7'
+};
+const modelLogos = {
+    'Qwen 3 14B':'https://raw.githubusercontent.com/lobehub/lobe-icons/refs/heads/master/packages/static-png/dark/qwen-color.png',
+    'Mistral 7B':'https://raw.githubusercontent.com/lobehub/lobe-icons/refs/heads/master/packages/static-png/dark/mistral-color.png',
+    'Phi-3 14B':'https://units.arma3.com/groups/img/192824/6d47O5TSnM.png',
+    'GLM-4 9B':'https://raw.githubusercontent.com/lobehub/lobe-icons/refs/heads/master/packages/static-png/dark/chatglm-color.png',
+    'DeepSeek V3 16B':'https://raw.githubusercontent.com/lobehub/lobe-icons/refs/heads/master/packages/static-png/dark/deepseek-color.png',
+    'Llama 3.2':'https://raw.githubusercontent.com/lobehub/lobe-icons/refs/heads/master/packages/static-png/dark/meta-color.png',
+    'Smart Ensemble':null
+};
+
+// ========== Formatters ==========
+const fmt = n => n>=1e6?(n/1e6).toFixed(1)+'M':n>=1e3?(n/1e3).toFixed(1)+'K':String(n);
+const fmtDur = ms => ms>=60000?(ms/60000).toFixed(1)+'m':ms>=1000?(ms/1000).toFixed(1)+'s':ms+'ms';
+const fmtUp = ms => { const s=ms/1000|0,m=s/60|0,h=m/60|0,d=h/24|0; return d>0?d+'d '+h%24+'h':h>0?h+'h '+m%60+'m':m>0?m+'m '+s%60+'s':s+'s'; };
+const timeAgo = ts => { const d=Date.now()-ts; return d<60000?(d/1000|0)+'s':d<3600000?(d/60000|0)+'m':(d/3600000|0)+'h'; };
+
+// ========== Time-series data ==========
+const MAX_POINTS = 60;
+const ekgData = new Array(200).fill(0);
+const throughputData = new Array(MAX_POINTS).fill(0);
+const tokenInData = new Array(MAX_POINTS).fill(0);
+const tokenOutData = new Array(MAX_POINTS).fill(0);
+let prevRequests = 0;
+let prevTokensIn = 0;
+let prevTokensOut = 0;
+
+// ========== Clock ==========
+setInterval(() => {
+    document.getElementById('clock').textContent = new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}, 1000);
+
+// ========== EKG Canvas ==========
+const ekgCanvas = document.getElementById('ekg-canvas');
+const ekgCtx = ekgCanvas.getContext('2d');
+
+function drawEKG() {
+    const w = ekgCanvas.width = ekgCanvas.offsetWidth * 2;
+    const h = ekgCanvas.height = 100;
+    ekgCtx.clearRect(0,0,w,h);
+
+    // Grid
+    ekgCtx.strokeStyle = 'rgba(0,255,136,0.04)';
+    ekgCtx.lineWidth = 1;
+    for (let y=0;y<h;y+=20){ekgCtx.beginPath();ekgCtx.moveTo(0,y);ekgCtx.lineTo(w,y);ekgCtx.stroke();}
+    for (let x=0;x<w;x+=40){ekgCtx.beginPath();ekgCtx.moveTo(x,0);ekgCtx.lineTo(x,h);ekgCtx.stroke();}
+
+    // Line
+    const step = w / ekgData.length;
+    ekgCtx.beginPath();
+    ekgCtx.strokeStyle = '#00ff88';
+    ekgCtx.lineWidth = 2;
+    ekgCtx.shadowColor = '#00ff88';
+    ekgCtx.shadowBlur = 8;
+    for (let i=0;i<ekgData.length;i++){
+        const x = i*step;
+        const y = h/2 - ekgData[i]*(h/2.5);
+        i===0?ekgCtx.moveTo(x,y):ekgCtx.lineTo(x,y);
+    }
+    ekgCtx.stroke();
+    ekgCtx.shadowBlur = 0;
+
+    // Glow line at tip
+    const lastX = (ekgData.length-1)*step;
+    const lastY = h/2 - ekgData[ekgData.length-1]*(h/2.5);
+    ekgCtx.beginPath();
+    ekgCtx.arc(lastX,lastY,3,0,Math.PI*2);
+    ekgCtx.fillStyle = '#00ff88';
+    ekgCtx.shadowColor = '#00ff88';
+    ekgCtx.shadowBlur = 16;
+    ekgCtx.fill();
+    ekgCtx.shadowBlur = 0;
+}
+
+function pushEKG(val) {
+    ekgData.shift();
+    ekgData.push(val);
+}
+
+// ========== Throughput Chart ==========
+const tpCanvas = document.getElementById('throughput-canvas');
+const tpCtx = tpCanvas.getContext('2d');
+
+function drawChart(canvas, ctx, datasets, maxVal) {
+    const w = canvas.width = canvas.offsetWidth * 2;
+    const h = canvas.height = 280;
+    const pad = { t:10, b:24, l:2, r:2 };
+    const cw = w-pad.l-pad.r, ch = h-pad.t-pad.b;
+    ctx.clearRect(0,0,w,h);
+
+    // Grid
+    ctx.strokeStyle = 'rgba(255,255,255,0.03)';
+    ctx.lineWidth = 1;
+    for(let i=0;i<=4;i++){const y=pad.t+ch*(i/4);ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(w-pad.r,y);ctx.stroke();}
+
+    // Time labels
+    ctx.fillStyle = '#2a2a3a';
+    ctx.font = '16px monospace';
+    ctx.textAlign = 'center';
+    const labels = ['60s','45s','30s','15s','now'];
+    labels.forEach((l,i)=>{ctx.fillText(l, pad.l + cw*(i/(labels.length-1)), h-4);});
+
+    if (maxVal === 0) maxVal = 1;
+
+    datasets.forEach(ds => {
+        const step = cw / (ds.data.length - 1);
+
+        // Fill gradient
+        const grad = ctx.createLinearGradient(0,pad.t,0,pad.t+ch);
+        grad.addColorStop(0, ds.color + '30');
+        grad.addColorStop(1, ds.color + '00');
+        ctx.beginPath();
+        ctx.moveTo(pad.l, pad.t+ch);
+        for(let i=0;i<ds.data.length;i++){
+            ctx.lineTo(pad.l+i*step, pad.t+ch - (ds.data[i]/maxVal)*ch);
+        }
+        ctx.lineTo(pad.l+(ds.data.length-1)*step, pad.t+ch);
+        ctx.closePath();
+        ctx.fillStyle = grad;
+        ctx.fill();
+
+        // Line
+        ctx.beginPath();
+        ctx.strokeStyle = ds.color;
+        ctx.lineWidth = 2.5;
+        ctx.shadowColor = ds.color;
+        ctx.shadowBlur = 6;
+        for(let i=0;i<ds.data.length;i++){
+            const x = pad.l+i*step;
+            const y = pad.t+ch - (ds.data[i]/maxVal)*ch;
+            i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+        }
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+
+        // Dot at end
+        const lx = pad.l+(ds.data.length-1)*step;
+        const ly = pad.t+ch-(ds.data[ds.data.length-1]/maxVal)*ch;
+        ctx.beginPath(); ctx.arc(lx,ly,4,0,Math.PI*2);
+        ctx.fillStyle=ds.color; ctx.shadowColor=ds.color; ctx.shadowBlur=12; ctx.fill(); ctx.shadowBlur=0;
+    });
+}
+
+// ========== Donut Chart ==========
+const donutCanvas = document.getElementById('donut-canvas');
+const donutCtx = donutCanvas.getContext('2d');
+
+function drawDonut(usage, total) {
+    const size = 360;
+    donutCanvas.width = size; donutCanvas.height = size;
+    const cx=size/2, cy=size/2, r=size/2-20, inner=r*0.65;
+    donutCtx.clearRect(0,0,size,size);
+
+    const entries = Object.entries(usage);
+    if(entries.length===0||total===0){
+        donutCtx.beginPath();donutCtx.arc(cx,cy,r,0,Math.PI*2);
+        donutCtx.strokeStyle='#1a1a24';donutCtx.lineWidth=r-inner;donutCtx.stroke();
+        donutCtx.fillStyle='#3a3a4a';donutCtx.font='20px monospace';donutCtx.textAlign='center';donutCtx.textBaseline='middle';
+        donutCtx.fillText('NO DATA',cx,cy);
+        return;
+    }
+
+    let angle = -Math.PI/2;
+    entries.forEach(([name,data])=>{
+        const slice = (data.requests/total)*Math.PI*2;
+        const color = modelColors[name]||'#555';
+        donutCtx.beginPath();donutCtx.arc(cx,cy,r,angle,angle+slice);
+        donutCtx.arc(cx,cy,inner,angle+slice,angle,true);donutCtx.closePath();
+        donutCtx.fillStyle=color;
+        donutCtx.shadowColor=color;donutCtx.shadowBlur=10;
+        donutCtx.fill();donutCtx.shadowBlur=0;
+        angle+=slice;
+    });
+
+    // Center text
+    donutCtx.fillStyle='#e0e0e8';donutCtx.font='bold 28px monospace';donutCtx.textAlign='center';donutCtx.textBaseline='middle';
+    donutCtx.fillText(fmt(total),cx,cy-8);
+    donutCtx.fillStyle='#6a6a7a';donutCtx.font='12px monospace';
+    donutCtx.fillText('REQUESTS',cx,cy+14);
+
+    // Legend
+    const legend = document.getElementById('donut-legend');
+    legend.innerHTML = entries.map(([name,data])=>{
+        const color=modelColors[name]||'#555';
+        const logo=modelLogos[name];
+        const pct=total>0?Math.round(data.requests/total*100):0;
+        const tokens=fmt((data.inputTokens||0)+(data.outputTokens||0));
+        return `<div class="donut-legend-item">
+            <div class="donut-dot" style="background:${color};box-shadow:0 0 6px ${color}"></div>
+            ${logo?`<img src="${logo}" width="14" height="14" style="border-radius:2px">`:''}
+            <span style="color:${color};font-weight:600;min-width:100px">${name}</span>
+            <span style="color:var(--text-dim)">${pct}%</span>
+            <span style="color:var(--text-muted)">${tokens} tok</span>
+        </div>`;
+    }).join('');
+}
+
+// ========== System Monitor ==========
+const HW_POINTS = 40;
+const hwCpuHistory = new Array(HW_POINTS).fill(0);
+const hwRamHistory = new Array(HW_POINTS).fill(0);
+const hwGpuHistory = new Array(HW_POINTS).fill(0);
+const hwVramHistory = new Array(HW_POINTS).fill(0);
+const hwTempHistory = new Array(HW_POINTS).fill(0);
+
+function drawMiniChart(canvasId, data, color, maxVal = 100) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    const w = canvas.width = canvas.offsetWidth * 2;
+    const h = canvas.height = 64;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, w, h);
+
+    const step = w / (data.length - 1);
+
+    // Fill
+    const grad = ctx.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, color + '25');
+    grad.addColorStop(1, color + '00');
+    ctx.beginPath();
+    ctx.moveTo(0, h);
+    for (let i = 0; i < data.length; i++) {
+        ctx.lineTo(i * step, h - (data[i] / maxVal) * h * 0.9);
+    }
+    ctx.lineTo((data.length - 1) * step, h);
+    ctx.closePath();
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    // Line
+    ctx.beginPath();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.5;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 4;
+    for (let i = 0; i < data.length; i++) {
+        const x = i * step, y = h - (data[i] / maxVal) * h * 0.9;
+        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+}
+
+function getTempColor(temp) {
+    if (temp < 50) return 'var(--green)';
+    if (temp < 70) return 'var(--yellow)';
+    return 'var(--red)';
+}
+
+async function fetchSystem() {
+    try {
+        const res = await fetch(BASE + '/api/system');
+        const sys = await res.json();
+
+        // CPU
+        hwCpuHistory.shift(); hwCpuHistory.push(sys.cpu.percent);
+        document.getElementById('hw-cpu-pct').textContent = sys.cpu.percent + '%';
+        document.getElementById('hw-cpu-info').textContent = sys.cpu.cores + ' cores / ' + sys.cpu.model.substring(0, 30);
+        document.getElementById('hw-cpu-bar').style.width = sys.cpu.percent + '%';
+        drawMiniChart('hw-cpu-chart', hwCpuHistory, '#00e5ff');
+
+        // RAM
+        const ramGB = (n) => (n / 1073741824).toFixed(1) + ' GB';
+        hwRamHistory.shift(); hwRamHistory.push(sys.ram.percent);
+        document.getElementById('hw-ram-pct').textContent = sys.ram.percent + '%';
+        document.getElementById('hw-ram-info').textContent = ramGB(sys.ram.used) + ' / ' + ramGB(sys.ram.total);
+        document.getElementById('hw-ram-bar').style.width = sys.ram.percent + '%';
+        drawMiniChart('hw-ram-chart', hwRamHistory, '#a855f7');
+
+        // GPU
+        if (sys.gpu.available) {
+            hwGpuHistory.shift(); hwGpuHistory.push(sys.gpu.utilization);
+            document.getElementById('hw-gpu-pct').textContent = sys.gpu.utilization + '%';
+            document.getElementById('hw-gpu-info').textContent = sys.gpu.name;
+            document.getElementById('hw-gpu-bar').style.width = sys.gpu.utilization + '%';
+            drawMiniChart('hw-gpu-chart', hwGpuHistory, '#00ff88');
+
+            // VRAM
+            const vramPct = sys.gpu.memTotal > 0 ? Math.round(sys.gpu.memUsed / sys.gpu.memTotal * 100) : 0;
+            hwVramHistory.shift(); hwVramHistory.push(vramPct);
+            document.getElementById('hw-vram-pct').textContent = vramPct + '%';
+            document.getElementById('hw-vram-info').textContent = (sys.gpu.memUsed / 1024).toFixed(1) + ' / ' + (sys.gpu.memTotal / 1024).toFixed(1) + ' GB';
+            document.getElementById('hw-vram-bar').style.width = vramPct + '%';
+            drawMiniChart('hw-vram-chart', hwVramHistory, '#ffcc00');
+
+            // Temp
+            const temp = sys.gpu.temp;
+            hwTempHistory.shift(); hwTempHistory.push(temp);
+            const tempColor = getTempColor(temp);
+            document.getElementById('hw-gpu-temp').textContent = temp + 'C';
+            document.getElementById('hw-gpu-temp').style.color = tempColor;
+            document.getElementById('hw-gpu-power').textContent = sys.gpu.power.toFixed(0) + 'W draw';
+            document.getElementById('hw-temp-bar').style.width = Math.min(temp, 100) + '%';
+            document.getElementById('hw-temp-bar').style.background = tempColor;
+            document.getElementById('hw-temp-bar').style.boxShadow = '0 0 8px ' + tempColor;
+            drawMiniChart('hw-temp-chart', hwTempHistory, tempColor.startsWith('var') ? '#00ff88' : tempColor);
+        } else {
+            document.getElementById('hw-gpu-pct').textContent = 'N/A';
+            document.getElementById('hw-gpu-info').textContent = 'No NVIDIA GPU detected';
+            document.getElementById('hw-vram-pct').textContent = 'N/A';
+            document.getElementById('hw-vram-info').textContent = '--';
+            document.getElementById('hw-gpu-temp').textContent = 'N/A';
+            document.getElementById('hw-gpu-power').textContent = '--';
+        }
+
+        // Process
+        const procMB = (sys.processMemory / 1048576).toFixed(0);
+        document.getElementById('hw-proc-mem').textContent = procMB + ' MB';
+        document.getElementById('hw-proc-info').textContent = 'Node ' + sys.nodeVersion + ' / ' + sys.platform;
+        document.getElementById('hw-hostname').textContent = sys.hostname;
+    } catch {}
+}
+
+// ========== Data Fetch & Render ==========
+let st = null, stats = null;
+
+async function fetchData() {
+    try {
+        const [a,b] = await Promise.all([fetch(BASE+'/api/status'),fetch(BASE+'/api/stats')]);
+        st = await a.json(); stats = await b.json();
+        render();
+    } catch {
+        document.getElementById('status-badge').className='status-badge offline';
+        document.getElementById('status-text').textContent='OFFLINE';
+    }
+}
+
+function render() {
+    if(!st||!stats) return;
+
+    // Status
+    const badge=document.getElementById('status-badge'),stxt=document.getElementById('status-text');
+    if(st.online){badge.className='status-badge';stxt.textContent='ONLINE';}
+    else{badge.className='status-badge offline';stxt.textContent='OFFLINE';}
+
+    // Stats
+    document.getElementById('s-uptime').textContent=fmtUp(stats.uptime);
+    document.getElementById('s-since').textContent='since '+new Date(Date.now()-stats.uptime).toLocaleTimeString('de-DE');
+    document.getElementById('s-reqs').textContent=fmt(stats.requests);
+    document.getElementById('s-active').textContent=stats.activeRequests;
+    document.getElementById('s-tokens').textContent=fmt(stats.totalTokens);
+    document.getElementById('s-tin').textContent=fmt(stats.totalInputTokens);
+    document.getElementById('s-tout').textContent=fmt(stats.totalOutputTokens);
+    document.getElementById('s-lat').textContent=stats.avgDuration>0?fmtDur(stats.avgDuration):'--';
+    document.getElementById('s-errs').textContent=stats.errors+' err';
+
+    const online=Object.values(st.models).filter(v=>v).length;
+    document.getElementById('s-models').textContent=online;
+    document.getElementById('s-mtotal').textContent='of '+Object.keys(st.models).length;
+    document.getElementById('ollama-url').textContent=st.ollama||'--';
+    document.getElementById('sys-ollama').textContent='Ollama: '+(st.online?'CONNECTED':'DOWN');
+
+    // EKG push
+    const newReqs = stats.requests - prevRequests;
+    pushEKG(newReqs > 0 ? Math.min(newReqs * 0.5, 1) : Math.random()*0.02);
+    prevRequests = stats.requests;
+    document.getElementById('live-rps').innerHTML = (stats.history.filter(h=>Date.now()-h.timestamp<60000).length)+' <span style="font-size:10px;font-weight:400;color:var(--text-dim)">req/min</span>';
+
+    // Throughput timeline
+    throughputData.shift(); throughputData.push(newReqs);
+    const tMax = Math.max(...throughputData, 1);
+    drawChart(tpCanvas,tpCtx,[{data:throughputData,color:'#00ff88'}],tMax);
+
+    // Token flow
+    const newIn = stats.totalInputTokens - prevTokensIn;
+    const newOut = stats.totalOutputTokens - prevTokensOut;
+    tokenInData.shift(); tokenInData.push(newIn);
+    tokenOutData.shift(); tokenOutData.push(newOut);
+    prevTokensIn = stats.totalInputTokens;
+    prevTokensOut = stats.totalOutputTokens;
+    const tkMax = Math.max(...tokenInData,...tokenOutData,1);
+    const tkCanvas = document.getElementById('token-canvas');
+    const tkCtx = tkCanvas.getContext('2d');
+    drawChart(tkCanvas,tkCtx,[{data:tokenInData,color:'#a855f7'},{data:tokenOutData,color:'#06b6d4'}],tkMax);
+
+    // Models
+    renderModels(st.models);
+    // Log
+    renderLog(stats.history);
+    // Donut
+    drawDonut(stats.modelUsage, stats.requests);
+}
+
+function renderModels(models) {
+    const c=document.getElementById('model-list');
+    if(!models||!Object.keys(models).length){c.innerHTML='<div class="empty">NO MODELS</div>';return;}
+    const ms=stats?.modelUsage||{};
+    c.innerHTML=Object.entries(models).map(([name,installed])=>{
+        const color=modelColors[name]||'#555',logo=modelLogos[name];
+        const m=ms[name],req=m?m.requests:0,avg=m&&m.requests?Math.round(m.totalDuration/m.requests):0;
+        const icon=logo
+            ?`<div class="model-icon" style="background:${color}15;border:1px solid ${color}25"><img src="${logo}" width="20" height="20" style="border-radius:4px"></div>`
+            :`<div class="model-icon" style="background:linear-gradient(135deg,#6366f1,#a855f7)"><svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M12 2L15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2z"/></svg></div>`;
+        return `<div class="model-card">${icon}<div class="model-info"><div class="model-name">${name}</div><div class="model-id">${req>0?req+' req':'idle'}${avg>0?' / '+fmtDur(avg):''}</div></div><div class="model-status">${installed?'<span class="badge-installed">ONLINE</span>':`<span class="badge-pull" onclick="pullModel('${name}')">PULL</span>`}</div></div>`;
+    }).join('');
+}
+
+function renderLog(history) {
+    const c=document.getElementById('log-list');
+    document.getElementById('log-count').textContent=fmt(stats?.requests||0)+' total';
+    if(!history||!history.length){c.innerHTML='<div class="empty">AWAITING REQUESTS...</div>';return;}
+    c.innerHTML=history.map(e=>{
+        const color=modelColors[e.model]||'#555',logo=modelLogos[e.model],err=!!e.error;
+        return `<div class="log-entry${err?' err':''}"><div class="log-time">${timeAgo(e.timestamp)}</div><div class="log-model" style="color:${color}">${logo?`<img src="${logo}" width="12" height="12" style="border-radius:2px">`:''}${e.model||'?'}</div>${err?`<div class="log-err">${e.error}</div>`:`<div class="log-tokens">${fmt(e.inputTokens||0)} in / ${fmt(e.outputTokens||0)} out</div>`}<div class="log-dur">${e.duration>0?fmtDur(e.duration):'--'}</div></div>`;
+    }).join('');
+}
+
+async function pullModel(name) {
+    const btn=event.target;btn.className='badge-pulling';btn.textContent='PULLING...';
+    try{
+        const res=await fetch(BASE+'/api/models/pull',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:name})});
+        const reader=res.body.getReader(),dec=new TextDecoder();let buf='';
+        while(true){const{done,value}=await reader.read();if(done)break;buf+=dec.decode(value,{stream:true});const lines=buf.split('\n');buf=lines.pop();
+        for(const l of lines){if(!l.startsWith('data: '))continue;const d=l.slice(6);if(d==='[DONE]')break;try{const j=JSON.parse(d);if(j.total&&j.completed)btn.textContent=Math.round(j.completed/j.total*100)+'%';else if(j.status)btn.textContent=j.status.substring(0,15).toUpperCase();}catch{}}}
+        btn.className='badge-installed';btn.textContent='ONLINE';fetchData();
+    }catch{btn.className='badge-pull';btn.textContent='FAILED';setTimeout(()=>btn.textContent='PULL',2000);}
+}
+
+// EKG animation loop
+function animateEKG() { drawEKG(); requestAnimationFrame(animateEKG); }
+animateEKG();
+
+// Fetch loop
+fetchData();
+fetchSystem();
+setInterval(fetchData, 2000);
+setInterval(fetchSystem, 2000);
+</script>
+</body>
+</html>

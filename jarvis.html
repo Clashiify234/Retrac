@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <link rel="icon" href="favicon.png" sizes="any">
+    <title>Jarvis - Retrac</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --ios-bg: #000000;
+            --ios-card: #1c1c1e;
+            --ios-card2: #2c2c2e;
+            --ios-separator: #38383a;
+            --ios-label: #8e8e93;
+            --ios-blue: #0a84ff;
+            --ios-green: #30d158;
+            --ios-orange: #ff9f0a;
+            --ios-red: #ff453a;
+            --ios-yellow: #ffd60a;
+            --ios-indigo: #5e5ce6;
+            --ios-teal: #64d2ff;
+            --safe-bottom: env(safe-area-inset-bottom, 0px);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body { font-family: -apple-system, 'SF Pro Display', 'SF Pro Text', 'Inter', 'Helvetica Neue', sans-serif; background: var(--ios-bg); color: #fff; -webkit-font-smoothing: antialiased; }
+        @supports (height: 100dvh) { .app { height: 100dvh; } }
+
+        .app { display: flex; flex-direction: column; height: 100vh; max-width: 430px; margin: 0 auto; position: relative; overflow: hidden; }
+
+        /* iOS Scrollbar */
+        ::-webkit-scrollbar { width: 0; }
+
+        /* iOS Navigation Bar */
+        .ios-nav { padding: 58px 16px 12px; }
+        .ios-nav h1 { font-size: 34px; font-weight: 700; letter-spacing: 0.37px; }
+        .ios-nav-inline { display: flex; align-items: center; justify-content: space-between; padding: 0 16px; height: 44px; }
+        .ios-nav-inline h1 { font-size: 17px; font-weight: 600; }
+
+        /* iOS Grouped Table */
+        .ios-section { padding: 0 16px; margin-bottom: 35px; }
+        .ios-section-header { font-size: 13px; font-weight: 400; color: var(--ios-label); text-transform: uppercase; letter-spacing: -0.08px; padding: 0 16px 6px; }
+        .ios-group { background: var(--ios-card); border-radius: 10px; overflow: hidden; }
+        .ios-row { display: flex; align-items: center; padding: 11px 16px; min-height: 44px; position: relative; }
+        .ios-row + .ios-row { border-top: 0.5px solid var(--ios-separator); margin-left: 0; }
+        .ios-row-icon { width: 29px; height: 29px; border-radius: 6px; display: flex; align-items: center; justify-content: center; margin-right: 12px; flex-shrink: 0; }
+        .ios-row-content { flex: 1; min-width: 0; }
+        .ios-row-title { font-size: 17px; font-weight: 400; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .ios-row-subtitle { font-size: 13px; color: var(--ios-label); margin-top: 1px; }
+        .ios-row-value { font-size: 17px; color: var(--ios-label); margin-left: 8px; flex-shrink: 0; }
+        .ios-row-chevron { margin-left: 6px; flex-shrink: 0; color: #48484a; }
+        .ios-row-action { font-size: 17px; color: var(--ios-blue); flex-shrink: 0; margin-left: 8px; cursor: pointer; }
+        .ios-row:active { background: rgba(255,255,255,0.05); }
+
+        /* iOS Badge */
+        .ios-badge { min-width: 20px; height: 20px; border-radius: 10px; font-size: 13px; font-weight: 500; display: flex; align-items: center; justify-content: center; padding: 0 6px; color: #fff; }
+
+        /* Timer Display */
+        .timer-display { font-size: 56px; font-weight: 200; font-variant-numeric: tabular-nums; letter-spacing: -1px; text-align: center; padding: 20px 0; color: #fff; }
+
+        /* iOS Buttons - matching HIG */
+        .ios-btn { width: 100%; padding: 14px; border-radius: 14px; border: none; font-size: 17px; font-weight: 600; font-family: inherit; cursor: pointer; }
+        .ios-btn:active { opacity: 0.7; }
+
+        /* iOS Modal / Popup */
+        .ios-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 200; align-items: flex-end; justify-content: center; }
+        .ios-overlay.show { display: flex; }
+        .ios-sheet { background: var(--ios-card); border-radius: 14px 14px 0 0; width: 100%; max-width: 430px; padding: 0 0 calc(20px + var(--safe-bottom)); animation: sheetUp 0.3s ease; }
+        @keyframes sheetUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        .ios-sheet-handle { width: 36px; height: 5px; border-radius: 3px; background: rgba(255,255,255,0.2); margin: 8px auto 0; }
+        .ios-sheet-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px 12px; }
+        .ios-sheet-header h3 { font-size: 17px; font-weight: 600; }
+        .ios-sheet-body { padding: 0 16px 16px; }
+        .ios-input { width: 100%; background: var(--ios-card2); border: none; border-radius: 10px; padding: 11px 16px; font-size: 17px; color: #fff; outline: none; font-family: inherit; }
+        .ios-input::placeholder { color: #48484a; }
+        .ios-input:focus { outline: none; }
+        .ios-btn-primary { background: var(--ios-blue); color: #fff; }
+        .ios-btn-secondary { background: var(--ios-card2); color: var(--ios-blue); }
+        .ios-btn-danger { background: rgba(255,69,58,0.15); color: var(--ios-red); }
+
+        /* Empty State */
+        .ios-empty { text-align: center; padding: 40px 20px; }
+        .ios-empty-icon { width: 52px; height: 52px; margin: 0 auto 12px; border-radius: 13px; display: flex; align-items: center; justify-content: center; }
+        .ios-empty p { font-size: 15px; color: var(--ios-label); line-height: 1.4; }
+        .ios-empty p:first-of-type { font-size: 17px; color: #fff; font-weight: 600; margin-bottom: 4px; }
+    </style>
+</head>
+<body>
+
+<div class="app">
+    <div class="flex-1 overflow-y-auto" style="padding-bottom: calc(20px + var(--safe-bottom));" id="scroll-area">
+
+        <!-- Large Title Nav -->
+        <div class="ios-nav">
+            <div class="flex items-center justify-between" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+                <h1>Jarvis</h1>
+                <a href="voice.html" style="display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:17px;background:rgba(255,255,255,0.1);">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--ios-blue)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+                </a>
+            </div>
+        </div>
+
+        <!-- Status Row -->
+        <div class="ios-section">
+            <div class="ios-group">
+                <div class="ios-row">
+                    <div class="ios-row-icon" style="background:var(--ios-green);">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><path d="M20.2 20.2c2.04-2.03.02-7.36-4.5-11.9-4.54-4.52-9.87-6.54-11.9-4.5-2.04 2.03-.02 7.36 4.5 11.9 4.54 4.52 9.87 6.54 11.9 4.5Z"/><path d="M15.7 15.7c4.52-4.54 6.54-9.87 4.5-11.9-2.03-2.04-7.36-.02-11.9 4.5-4.52 4.54-6.54 9.87-4.5 11.9 2.03 2.04 7.36.02 11.9-4.5Z"/></svg>
+                    </div>
+                    <div class="ios-row-content">
+                        <div class="ios-row-title">Status</div>
+                    </div>
+                    <span style="font-size:15px;color:var(--ios-green);font-weight:500;">Online</span>
+                </div>
+                <div class="ios-row" style="cursor:pointer;" onclick="scrollToSection('timers')">
+                    <div class="ios-row-icon" style="background:var(--ios-orange);">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    </div>
+                    <div class="ios-row-content">
+                        <div class="ios-row-title">Aktive Timer</div>
+                    </div>
+                    <span class="ios-row-value" id="stat-timers">0</span>
+                    <svg class="ios-row-chevron" width="7" height="12" viewBox="0 0 7 12"><path d="M1 1l5 5-5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </div>
+                <div class="ios-row" style="cursor:pointer;" onclick="scrollToSection('reminders')">
+                    <div class="ios-row-icon" style="background:var(--ios-yellow);">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                    </div>
+                    <div class="ios-row-content">
+                        <div class="ios-row-title">Erinnerungen</div>
+                    </div>
+                    <span class="ios-row-value" id="stat-reminders">0</span>
+                    <svg class="ios-row-chevron" width="7" height="12" viewBox="0 0 7 12"><path d="M1 1l5 5-5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </div>
+                <div class="ios-row" style="cursor:pointer;" onclick="scrollToSection('activity')">
+                    <div class="ios-row-icon" style="background:var(--ios-indigo);">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                    </div>
+                    <div class="ios-row-content">
+                        <div class="ios-row-title">Aktivitäten</div>
+                    </div>
+                    <span class="ios-row-value" id="stat-chats">0</span>
+                    <svg class="ios-row-chevron" width="7" height="12" viewBox="0 0 7 12"><path d="M1 1l5 5-5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </div>
+            </div>
+        </div>
+
+        <!-- Timer Section -->
+        <div class="ios-section" id="timers-section">
+            <div class="ios-section-header" style="display:flex;justify-content:space-between;align-items:center;">
+                <span>Timer</span>
+                <span style="text-transform:none;font-size:15px;color:var(--ios-blue);cursor:pointer;font-weight:400;" onclick="showAddTimer()">Hinzufügen</span>
+            </div>
+            <div id="timers-list">
+                <div class="ios-group">
+                    <div class="ios-empty">
+                        <div class="ios-empty-icon" style="background:rgba(255,159,10,0.15);">
+                            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--ios-orange)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                        </div>
+                        <p>Keine aktiven Timer</p>
+                        <p>Sag "Hey Jarvis, Timer 5 Minuten"</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Reminders Section -->
+        <div class="ios-section" id="reminders-section">
+            <div class="ios-section-header" style="display:flex;justify-content:space-between;align-items:center;">
+                <span>Erinnerungen</span>
+                <span style="text-transform:none;font-size:15px;color:var(--ios-blue);cursor:pointer;font-weight:400;" onclick="showAddReminder()">Hinzufügen</span>
+            </div>
+            <div id="reminders-list">
+                <div class="ios-group">
+                    <div class="ios-empty">
+                        <div class="ios-empty-icon" style="background:rgba(255,214,10,0.15);">
+                            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--ios-yellow)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                        </div>
+                        <p>Keine Erinnerungen</p>
+                        <p>Sag "Hey Jarvis, erinnere mich in 10 Minuten an..."</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Activity Section -->
+        <div class="ios-section" id="activity-section">
+            <div class="ios-section-header" style="display:flex;justify-content:space-between;align-items:center;">
+                <span>Aktivität</span>
+                <span style="text-transform:none;font-size:15px;color:var(--ios-red);cursor:pointer;font-weight:400;" onclick="clearActivity()">Löschen</span>
+            </div>
+            <div id="activity-list">
+                <div class="ios-group">
+                    <div class="ios-empty">
+                        <div class="ios-empty-icon" style="background:rgba(94,92,230,0.15);">
+                            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--ios-indigo)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                        </div>
+                        <p>Noch keine Aktivität</p>
+                        <p>Interagiere mit Jarvis um Logs zu sehen</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="ios-section">
+            <div class="ios-section-header">Schnellaktionen</div>
+            <div class="ios-group">
+                <a href="voice.html" class="ios-row" style="text-decoration:none;cursor:pointer;">
+                    <div class="ios-row-icon" style="background:var(--ios-green);">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>
+                    </div>
+                    <div class="ios-row-content"><div class="ios-row-title">Jarvis starten</div><div class="ios-row-subtitle">Voice Assistant öffnen</div></div>
+                    <svg class="ios-row-chevron" width="7" height="12" viewBox="0 0 7 12"><path d="M1 1l5 5-5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </a>
+                <a href="index.html" class="ios-row" style="text-decoration:none;cursor:pointer;">
+                    <div class="ios-row-icon" style="background:var(--ios-blue);">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                    </div>
+                    <div class="ios-row-content"><div class="ios-row-title">Chat öffnen</div><div class="ios-row-subtitle">Retrac AI</div></div>
+                    <svg class="ios-row-chevron" width="7" height="12" viewBox="0 0 7 12"><path d="M1 1l5 5-5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </a>
+            </div>
+        </div>
+
+    </div>
+
+</div>
+
+<!-- Timer Sheet -->
+<div class="ios-overlay" id="timer-popup">
+    <div class="ios-sheet">
+        <div class="ios-sheet-handle"></div>
+        <div class="ios-sheet-header">
+            <span style="font-size:17px;color:var(--ios-blue);cursor:pointer;" onclick="closePopup('timer-popup')">Abbrechen</span>
+            <h3>Timer</h3>
+            <span style="font-size:17px;color:var(--ios-blue);cursor:pointer;font-weight:600;" onclick="addTimer()">Starten</span>
+        </div>
+        <div class="ios-sheet-body">
+            <div style="display:flex;gap:12px;margin-bottom:16px;">
+                <div style="flex:1;">
+                    <label style="font-size:13px;color:var(--ios-label);display:block;margin-bottom:6px;">Minuten</label>
+                    <input type="number" id="timer-minutes" value="5" min="0" max="999" class="ios-input" style="text-align:center;font-size:28px;font-weight:300;padding:16px;">
+                </div>
+                <div style="flex:1;">
+                    <label style="font-size:13px;color:var(--ios-label);display:block;margin-bottom:6px;">Sekunden</label>
+                    <input type="number" id="timer-seconds" value="0" min="0" max="59" class="ios-input" style="text-align:center;font-size:28px;font-weight:300;padding:16px;">
+                </div>
+            </div>
+            <label style="font-size:13px;color:var(--ios-label);display:block;margin-bottom:6px;">Bezeichnung</label>
+            <input type="text" id="timer-name" placeholder="Timer" class="ios-input" style="margin-bottom:20px;">
+        </div>
+    </div>
+</div>
+
+<!-- Reminder Sheet -->
+<div class="ios-overlay" id="reminder-popup">
+    <div class="ios-sheet">
+        <div class="ios-sheet-handle"></div>
+        <div class="ios-sheet-header">
+            <span style="font-size:17px;color:var(--ios-blue);cursor:pointer;" onclick="closePopup('reminder-popup')">Abbrechen</span>
+            <h3>Erinnerung</h3>
+            <span style="font-size:17px;color:var(--ios-blue);cursor:pointer;font-weight:600;" onclick="addReminder()">Fertig</span>
+        </div>
+        <div class="ios-sheet-body">
+            <label style="font-size:13px;color:var(--ios-label);display:block;margin-bottom:6px;">Woran erinnern?</label>
+            <input type="text" id="reminder-text" placeholder="Einkaufen gehen..." class="ios-input" style="margin-bottom:16px;">
+            <label style="font-size:13px;color:var(--ios-label);display:block;margin-bottom:6px;">In wie vielen Minuten?</label>
+            <input type="number" id="reminder-minutes" value="10" min="1" max="9999" class="ios-input" style="text-align:center;font-size:28px;font-weight:300;padding:16px;">
+        </div>
+    </div>
+</div>
+
+<script>
+let timers = [];
+
+document.addEventListener('DOMContentLoaded', () => {
+    loadData();
+    setInterval(() => { if (timers.length > 0) { renderTimers(); updateStats(); } }, 1000);
+    setInterval(loadData, 5000);
+});
+
+function loadData() { renderTimers(); renderReminders(); renderActivity(); updateStats(); }
+
+function updateStats() {
+    document.getElementById('stat-timers').textContent = timers.length;
+    const reminders = JSON.parse(localStorage.getItem('jarvis_reminders') || '[]');
+    document.getElementById('stat-reminders').textContent = reminders.filter(r => r.time > Date.now()).length;
+    const dashboard = JSON.parse(localStorage.getItem('jarvis_dashboard') || '{"chats":[],"activity":[]}');
+    document.getElementById('stat-chats').textContent = (dashboard.activity || []).length;
+}
+
+// ── Timers ──
+function renderTimers() {
+    const container = document.getElementById('timers-list');
+    const stored = JSON.parse(localStorage.getItem('jarvis_active_timers') || '[]');
+    stored.forEach(st => { if (!timers.find(t => t.id === st.id) && st.endsAt > Date.now()) timers.push(st); });
+    timers = timers.filter(t => t.endsAt > Date.now());
+
+    if (timers.length === 0) {
+        container.innerHTML = `<div class="ios-group"><div class="ios-empty">
+            <div class="ios-empty-icon" style="background:rgba(255,159,10,0.15);"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--ios-orange)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+            <p>Keine aktiven Timer</p><p>Sag "Hey Jarvis, Timer 5 Minuten"</p>
+        </div></div>`;
+        return;
+    }
+
+    let html = '<div class="ios-group">';
+    timers.forEach((t, i) => {
+        const rem = Math.max(0, t.endsAt - Date.now());
+        const m = Math.floor(rem / 60000), s = Math.floor((rem % 60000) / 1000);
+        const timeStr = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+        const border = i > 0 ? 'border-top:0.5px solid var(--ios-separator);' : '';
+        html += `<div class="ios-row" style="${border}">
+            <div class="ios-row-icon" style="background:var(--ios-orange);"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+            <div class="ios-row-content"><div class="ios-row-title">${t.name || 'Timer'}</div><div class="ios-row-subtitle" style="font-variant-numeric:tabular-nums;font-size:22px;font-weight:300;color:#fff;margin-top:2px;">${timeStr}</div></div>
+            <span style="font-size:15px;color:var(--ios-red);cursor:pointer;" onclick="cancelTimer('${t.id}')">Stopp</span>
+        </div>`;
+    });
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+function addTimer() {
+    const mins = parseInt(document.getElementById('timer-minutes').value) || 0;
+    const secs = parseInt(document.getElementById('timer-seconds').value) || 0;
+    const name = document.getElementById('timer-name').value.trim();
+    const totalMs = (mins * 60 + secs) * 1000;
+    if (totalMs <= 0) return;
+    const timer = { id: 'timer_' + Date.now(), name: name || `${mins}m ${secs}s`, endsAt: Date.now() + totalMs, duration: totalMs };
+    timers.push(timer);
+    localStorage.setItem('jarvis_active_timers', JSON.stringify(timers));
+    logActivity('timer', `Timer "${timer.name}" gestartet`);
+    closePopup('timer-popup');
+    renderTimers(); updateStats();
+}
+
+function cancelTimer(id) {
+    const t = timers.find(t => t.id === id);
+    timers = timers.filter(t => t.id !== id);
+    localStorage.setItem('jarvis_active_timers', JSON.stringify(timers));
+    if (t) logActivity('timer', `Timer "${t.name || 'Timer'}" gestoppt`);
+    renderTimers(); updateStats();
+}
+
+// ── Reminders ──
+function renderReminders() {
+    const container = document.getElementById('reminders-list');
+    let reminders = JSON.parse(localStorage.getItem('jarvis_reminders') || '[]');
+    const now = Date.now();
+    const pending = reminders.filter(r => r.time > now).sort((a,b) => a.time - b.time);
+
+    if (pending.length === 0) {
+        container.innerHTML = `<div class="ios-group"><div class="ios-empty">
+            <div class="ios-empty-icon" style="background:rgba(255,214,10,0.15);"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--ios-yellow)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></div>
+            <p>Keine Erinnerungen</p><p>Sag "Hey Jarvis, erinnere mich in 10 Minuten an..."</p>
+        </div></div>`;
+        return;
+    }
+
+    let html = '<div class="ios-group">';
+    pending.forEach((r, i) => {
+        const diff = r.time - now;
+        const mins = Math.floor(diff / 60000);
+        const timeStr = mins >= 60 ? `In ${Math.floor(mins/60)} Std ${mins%60} Min` : `In ${mins} Min`;
+        const border = i > 0 ? 'border-top:0.5px solid var(--ios-separator);' : '';
+        html += `<div class="ios-row" style="${border}">
+            <div class="ios-row-icon" style="background:var(--ios-yellow);"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></div>
+            <div class="ios-row-content"><div class="ios-row-title">${r.text}</div><div class="ios-row-subtitle">${timeStr}</div></div>
+            <span style="font-size:15px;color:var(--ios-red);cursor:pointer;" onclick="deleteReminder(${r.time})">Löschen</span>
+        </div>`;
+    });
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+function addReminder() {
+    const text = document.getElementById('reminder-text').value.trim();
+    const mins = parseInt(document.getElementById('reminder-minutes').value) || 0;
+    if (!text || mins <= 0) return;
+    let reminders = JSON.parse(localStorage.getItem('jarvis_reminders') || '[]');
+    reminders.push({ text, time: Date.now() + mins * 60000 });
+    localStorage.setItem('jarvis_reminders', JSON.stringify(reminders));
+    logActivity('reminder', `Erinnerung: "${text}" in ${mins}m`);
+    closePopup('reminder-popup');
+    renderReminders(); updateStats();
+}
+
+function deleteReminder(time) {
+    let reminders = JSON.parse(localStorage.getItem('jarvis_reminders') || '[]');
+    reminders = reminders.filter(r => r.time !== time);
+    localStorage.setItem('jarvis_reminders', JSON.stringify(reminders));
+    renderReminders(); updateStats();
+}
+
+// ── Activity ──
+function renderActivity() {
+    const container = document.getElementById('activity-list');
+    const dashboard = JSON.parse(localStorage.getItem('jarvis_dashboard') || '{"chats":[],"activity":[]}');
+    const logs = (dashboard.activity || []).slice(-20).reverse();
+
+    if (logs.length === 0) {
+        container.innerHTML = `<div class="ios-group"><div class="ios-empty">
+            <div class="ios-empty-icon" style="background:rgba(94,92,230,0.15);"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--ios-indigo)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+            <p>Noch keine Aktivität</p><p>Interagiere mit Jarvis um Logs zu sehen</p>
+        </div></div>`;
+        return;
+    }
+
+    const colors = { timer: 'var(--ios-orange)', reminder: 'var(--ios-yellow)', chat: 'var(--ios-blue)', command: 'var(--ios-teal)', system: 'var(--ios-label)' };
+    const icons = {
+        timer: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+        reminder: '<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>',
+        chat: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+        command: '<polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>',
+        system: '<circle cx="12" cy="12" r="3"/>'
+    };
+
+    let html = '<div class="ios-group">';
+    logs.forEach((log, i) => {
+        const c = colors[log.type] || colors.system;
+        const ic = icons[log.type] || icons.system;
+        const time = log.timestamp ? formatTime(log.timestamp) : '';
+        const border = i > 0 ? 'border-top:0.5px solid var(--ios-separator);' : '';
+        html += `<div class="ios-row" style="${border}">
+            <div class="ios-row-icon" style="background:${c};"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">${ic}</svg></div>
+            <div class="ios-row-content"><div class="ios-row-title" style="font-size:15px;">${log.message}</div><div class="ios-row-subtitle">${time}</div></div>
+        </div>`;
+    });
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+function logActivity(type, message) {
+    const dashboard = JSON.parse(localStorage.getItem('jarvis_dashboard') || '{"chats":[],"activity":[]}');
+    if (!dashboard.activity) dashboard.activity = [];
+    dashboard.activity.push({ type, message, timestamp: Date.now() });
+    if (dashboard.activity.length > 100) dashboard.activity = dashboard.activity.slice(-100);
+    localStorage.setItem('jarvis_dashboard', JSON.stringify(dashboard));
+    renderActivity(); updateStats();
+}
+
+function clearActivity() {
+    const dashboard = JSON.parse(localStorage.getItem('jarvis_dashboard') || '{"chats":[],"activity":[]}');
+    dashboard.activity = [];
+    localStorage.setItem('jarvis_dashboard', JSON.stringify(dashboard));
+    renderActivity(); updateStats();
+}
+
+// ── Helpers ──
+function formatTime(ts) {
+    const d = new Date(ts), now = new Date(), diff = now - d;
+    if (diff < 60000) return 'Gerade eben';
+    if (diff < 3600000) return `Vor ${Math.floor(diff/60000)} Min`;
+    if (d.toDateString() === now.toDateString()) return `Heute, ${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`;
+    return `${d.getDate()}.${d.getMonth()+1}. ${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+
+function scrollToSection(id) {
+    document.getElementById(id + '-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function showAddTimer() { document.getElementById('timer-popup').classList.add('show'); }
+function showAddReminder() { document.getElementById('reminder-popup').classList.add('show'); }
+function closePopup(id) { document.getElementById(id).classList.remove('show'); }
+document.querySelectorAll('.ios-overlay').forEach(el => { el.addEventListener('click', e => { if (e.target === el) el.classList.remove('show'); }); });
+</script>
+</body>
+</html>

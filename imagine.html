@@ -292,6 +292,8 @@
                                 <button class="img-model-opt w-full text-left px-4 py-2.5 text-[14px] rounded-lg hover:bg-[#333] transition-colors text-[#888]" data-model="Nano Banana Pro">Nano Banana Pro</button>
                                 <button class="img-model-opt w-full text-left px-4 py-2.5 text-[14px] rounded-lg hover:bg-[#333] transition-colors text-[#888]" data-model="Nano Banana 2">Nano Banana 2</button>
                                 <button class="img-model-opt w-full text-left px-4 py-2.5 text-[14px] rounded-lg hover:bg-[#333] transition-colors text-[#888]" data-model="Imagen 4">Imagen 4</button>
+                                <div class="border-t border-[#444] my-1 mx-2"></div>
+                                <button class="img-model-opt w-full text-left px-4 py-2.5 text-[14px] rounded-lg hover:bg-[#333] transition-colors text-[#888]" data-model="Juggernaut XL">⚡ Juggernaut XL</button>
                             </div>
                         </div>
 
@@ -427,6 +429,8 @@
                     <button class="img-model-opt w-full text-left px-4 py-2.5 text-[14px] rounded-lg hover:bg-[#333] transition-colors text-[#888]" data-model="Nano Banana Pro">Nano Banana Pro</button>
                     <button class="img-model-opt w-full text-left px-4 py-2.5 text-[14px] rounded-lg hover:bg-[#333] transition-colors text-[#888]" data-model="Nano Banana 2">Nano Banana 2</button>
                     <button class="img-model-opt w-full text-left px-4 py-2.5 text-[14px] rounded-lg hover:bg-[#333] transition-colors text-[#888]" data-model="Imagen 4">Imagen 4</button>
+                    <div class="border-t border-[#444] my-1 mx-2"></div>
+                    <button class="img-model-opt w-full text-left px-4 py-2.5 text-[14px] rounded-lg hover:bg-[#333] transition-colors text-[#888]" data-model="Juggernaut XL">⚡ Juggernaut XL</button>
                 `;
                 modelLabel.textContent = 'Nano Banana';
                 rebindModelOpts();
@@ -752,7 +756,9 @@
                 let fullPrompt = prompt;
                 if (style && style !== 'Style' && style !== 'No Style') fullPrompt += `, ${style} style`;
 
-                const result = await RetracAPI.generateImage(fullPrompt, selectedModel, ratio);
+                const result = selectedModel === 'Juggernaut XL'
+                    ? await RetracAPI.generateImageLocal(fullPrompt, ratio)
+                    : await RetracAPI.generateImage(fullPrompt, selectedModel, ratio);
                 if (result.error) {
                     creationsView.innerHTML = `<div class="flex flex-col items-center justify-center h-full"><p class="text-red-400 text-[14px]">${result.error}</p></div>`;
                     return;

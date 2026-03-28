@@ -16,7 +16,7 @@ const RetracAPI = {
         }
     },
 
-    async streamChat({ model, messages, onThinking, onText, onError, onDone, onActivity, onSources }) {
+    async streamChat({ model, messages, onThinking, onText, onError, onDone, onActivity, onSources, systemPrompt }) {
         const searchWeb = RetracSettings.get('searchWeb') || false;
         const deepResearch = RetracSettings.get('deepResearch') || false;
         const handwriting = RetracSettings.get('handwriting') || false;
@@ -27,7 +27,7 @@ const RetracAPI = {
             const response = await fetch(this.baseUrl + '/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ model, messages, searchWeb, deepResearch, handwriting }),
+                body: JSON.stringify({ model, messages, searchWeb, deepResearch, handwriting, systemPrompt }),
                 signal: this.currentAbortController.signal
             });
 
@@ -105,6 +105,16 @@ const RetracAPI = {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ prompt, model, aspectRatio, referenceImage })
+        });
+        return res.json();
+    },
+
+    // Generate image via local Fooocus (Juggernaut XL)
+    async generateImageLocal(prompt, aspectRatio) {
+        const res = await fetch(this.baseUrl + '/api/generate-image-local', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prompt, aspectRatio })
         });
         return res.json();
     },

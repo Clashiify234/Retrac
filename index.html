@@ -251,7 +251,15 @@
                 <svg class="shrink-0" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="6" width="15" height="13" rx="2"/><path d="M17 10l5-3v10l-5-3v-4z"/><circle cx="9.5" cy="12.5" r="2.5" stroke-width="1.5"/></svg>
                 <span class="text-[15px] font-medium sidebar-hide">Imagine</span>
             </a>
-            <a href="finalize.html" class="sidebar-nav-link flex items-center gap-3.5 py-2 px-3 rounded-lg hover:bg-[#232323] transition-colors text-[#e0e0e0] hover:text-white">
+<a href="voice.html" class="sidebar-nav-link flex items-center gap-3.5 py-2 px-3 rounded-lg hover:bg-[#232323] transition-colors text-[#e0e0e0] hover:text-white">
+                <svg class="shrink-0" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="22"></line></svg>
+                <span class="text-[15px] font-medium sidebar-hide">Voice</span>
+            </a>
+<a href="jarvis.html" class="sidebar-nav-link flex items-center gap-3.5 py-2 px-3 rounded-lg hover:bg-[#232323] transition-colors text-[#e0e0e0] hover:text-white">
+                <svg class="shrink-0" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+                <span class="text-[15px] font-medium sidebar-hide">Jarvis</span>
+            </a>
+<a href="finalize.html" class="sidebar-nav-link flex items-center gap-3.5 py-2 px-3 rounded-lg hover:bg-[#232323] transition-colors text-[#e0e0e0] hover:text-white">
                 <svg class="shrink-0" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg>
                 <span class="text-[15px] font-medium sidebar-hide">Finalize</span>
             </a>
@@ -326,6 +334,8 @@
             <div id="recording-ui" class="hidden flex-col bg-[#2f2f2f] rounded-[2rem] shadow-2xl border border-[#3e3e3e] overflow-hidden">
                 <!-- Top hint -->
                 <p class="text-[#9ca3af] text-[14px] text-center pt-4 pb-2">Go ahead, record a quick note</p>
+                <!-- Live transcription preview -->
+                <p id="recording-transcript" class="text-white text-[15px] text-center px-6 pb-2 min-h-[24px] italic opacity-70"></p>
                 <!-- Waveform -->
                 <div class="flex items-end justify-center gap-[3px] px-8 h-[50px]" id="waveform">
                 </div>
@@ -1706,6 +1716,10 @@
         let analyser = null;
         let micStream = null;
         let animFrameId = null;
+        let speechRecognition = null;
+        let transcriptText = '';
+        let interimTranscript = '';
+        const recordingTranscript = document.getElementById('recording-transcript');
 
         // Generate waveform bars
         const waveform = document.getElementById('waveform');
@@ -1795,6 +1809,67 @@
                 console.warn('Microphone access denied, using silent mode');
             }
 
+            // Start speech recognition
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            transcriptText = '';
+            interimTranscript = '';
+            recordingTranscript.textContent = '';
+
+            if (SpeechRecognition) {
+                speechRecognition = new SpeechRecognition();
+                speechRecognition.continuous = true;
+                speechRecognition.interimResults = true;
+                speechRecognition.lang = document.documentElement.lang || navigator.language || 'de-DE';
+                speechRecognition.maxAlternatives = 1;
+
+                speechRecognition.onresult = (event) => {
+                    let allFinal = '';
+                    let currentInterim = '';
+                    for (let i = 0; i < event.results.length; i++) {
+                        const result = event.results[i];
+                        if (result.isFinal) {
+                            allFinal += result[0].transcript + ' ';
+                        } else {
+                            currentInterim += result[0].transcript;
+                        }
+                    }
+                    transcriptText = allFinal.trim();
+                    interimTranscript = currentInterim;
+                    const display = (transcriptText + ' ' + interimTranscript).trim();
+                    recordingTranscript.textContent = display || 'Listening...';
+                };
+
+                speechRecognition.onerror = (e) => {
+                    console.warn('Speech recognition error:', e.error);
+                    if (e.error === 'not-allowed') {
+                        recordingTranscript.textContent = 'Microphone permission denied';
+                    }
+                };
+
+                speechRecognition.onstart = () => {
+                    console.log('Speech recognition started');
+                    recordingTranscript.textContent = 'Listening...';
+                };
+
+                // Auto-restart if browser stops recognition (e.g. after silence)
+                speechRecognition.onend = () => {
+                    console.log('Speech recognition ended, restarting...');
+                    if (recordingInterval && !recordingPaused && speechRecognition) {
+                        try { speechRecognition.start(); } catch(e) { console.warn('Restart failed', e); }
+                    }
+                };
+
+                try {
+                    speechRecognition.start();
+                } catch(e) {
+                    console.error('Failed to start speech recognition:', e);
+                    recordingTranscript.textContent = 'Speech recognition not available';
+                }
+            } else {
+                console.warn('SpeechRecognition API not available in this browser');
+                recordingTranscript.textContent = 'Speech recognition not supported';
+            }
+
             recordingInterval = setInterval(() => {
                 if (!recordingPaused) {
                     recordingSeconds++;
@@ -1803,9 +1878,18 @@
             }, 1000);
         }
 
-        function stopRecording() {
-            clearInterval(recordingInterval);
-            recordingInterval = null;
+        function finishStopRecording(insertText) {
+            // Save text before clearing
+            const collected = (transcriptText + ' ' + interimTranscript).trim();
+            const displayed = recordingTranscript.textContent.trim();
+            let finalText = collected;
+            if (!finalText && displayed && displayed !== 'Listening...' && displayed !== 'Speech recognition not available' && displayed !== 'Speech recognition not supported' && displayed !== 'Microphone permission denied') {
+                finalText = displayed;
+            }
+
+            transcriptText = '';
+            interimTranscript = '';
+            recordingTranscript.textContent = '';
 
             // Stop animation
             if (animFrameId) {
@@ -1828,23 +1912,76 @@
             bars.forEach(bar => bar.style.height = '3px');
             recordingUI.style.transform = 'scale(1)';
 
+            // Show prompt container FIRST, then insert text
             recordingUI.classList.add('hidden');
             recordingUI.classList.remove('flex');
             promptContainer.classList.remove('hidden');
+
+            // Insert text AFTER prompt is visible so textarea has proper dimensions
+            if (insertText && finalText) {
+                console.log('Inserting transcribed text:', finalText);
+                const chatInput = document.getElementById('chat-input');
+                const existing = chatInput.value.trim();
+                chatInput.value = existing ? existing + ' ' + finalText : finalText;
+                chatInput.dispatchEvent(new Event('input', { bubbles: true }));
+                chatInput.focus();
+            }
+        }
+
+        function stopRecording(insertText) {
+            clearInterval(recordingInterval);
+            recordingInterval = null;
+
+            let finished = false;
+            function doFinish() {
+                if (finished) return;
+                finished = true;
+                if (speechRecognition) {
+                    speechRecognition.onend = null;
+                    speechRecognition.onresult = null;
+                    speechRecognition = null;
+                }
+                finishStopRecording(insertText);
+            }
+
+            if (speechRecognition) {
+                speechRecognition.onend = doFinish;
+                // Fallback if onend never fires
+                setTimeout(doFinish, 500);
+                try { speechRecognition.stop(); } catch(e) {
+                    doFinish();
+                }
+            } else {
+                doFinish();
+            }
         }
 
         micBtn.addEventListener('click', startRecording);
-        recordingCancel.addEventListener('click', stopRecording);
-        recordingConfirm.addEventListener('click', stopRecording);
+        recordingCancel.addEventListener('click', () => stopRecording(false));
+        recordingConfirm.addEventListener('click', () => stopRecording(true));
 
         recordingPause.addEventListener('click', () => {
             recordingPaused = !recordingPaused;
             if (recordingPaused) {
                 pauseIcon.classList.add('hidden');
                 playIcon.classList.remove('hidden');
+                // Pause speech recognition
+                if (speechRecognition) {
+                    speechRecognition.onend = null;
+                    try { speechRecognition.stop(); } catch(e) {}
+                }
             } else {
                 pauseIcon.classList.remove('hidden');
                 playIcon.classList.add('hidden');
+                // Resume speech recognition
+                if (speechRecognition) {
+                    speechRecognition.onend = () => {
+                        if (recordingInterval && !recordingPaused) {
+                            try { speechRecognition.start(); } catch(e) {}
+                        }
+                    };
+                    try { speechRecognition.start(); } catch(e) {}
+                }
             }
         });
 
@@ -2243,7 +2380,7 @@
                     result = await RetracAPI.generateVideo(prompt, 'Veo 3 Fast', '16:9', 5);
                 } else {
                     // Pass the last generated image as reference for editing
-                    result = await RetracAPI.generateImage(prompt, 'Nano Banana', '1:1', lastGeneratedImage);
+                    result = await RetracAPI.generateImageLocal(prompt, '1:1');
                 }
 
                 if (result.error) throw new Error(result.error);
