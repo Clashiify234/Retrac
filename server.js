@@ -1912,7 +1912,9 @@ app.post('/api/tts', async (req, res) => {
             return res.send(cached);
         }
 
-        const tmpFile = path.join(__dirname, 'uploads', `tts-${Date.now()}.mp3`);
+        const uploadsDir = path.join(__dirname, 'uploads');
+        if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+        const tmpFile = path.join(uploadsDir, `tts-${Date.now()}.mp3`);
         const tts = new EdgeTTS({
             voice: voice || 'de-DE-FlorianMultilingualNeural',
             rate: '-10%',

@@ -5,7 +5,7 @@ const os = require('os');
 const { execSync } = require('child_process');
 
 const app = express();
-const PORT = process.env.PORT || 3456;
+const PORT = process.env.RETRACLOCAL_PORT || 3456;
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
 const API_KEY = process.env.API_KEY || '';
 
